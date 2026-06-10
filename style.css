@@ -127,6 +127,40 @@ h1, h2 { margin: 0; }
 .facon { font-size: 13px; }
 
 /* ============================================================
+   STATS
+   ============================================================ */
+.stats {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 16px; margin: 28px 0;
+}
+.stat-card {
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 22px 18px; text-align: center;
+  box-shadow: var(--shadow);
+}
+.stat-num { font-size: 32px; font-weight: 800; line-height: 1; }
+.stat-label { margin-top: 8px; font-size: 13px; color: var(--text-dim); }
+
+/* ============================================================
+   PANELS
+   ============================================================ */
+.panel {
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 22px; margin: 0 0 28px;
+  box-shadow: var(--shadow);
+}
+.panel-title { font-size: 18px; font-weight: 700; margin-bottom: 18px; }
+.hint { font-size: 12px; font-weight: 400; color: var(--text-dim); }
+
+/* Skills */
+.skills-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 28px; }
+.skill-head { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 6px; }
+.skill-name { font-weight: 600; }
+.skill-pct { color: var(--text-dim); }
+.skill-bar { height: 8px; border-radius: 999px; background: var(--bg-sunken); overflow: hidden; }
+.skill-fill { height: 100%; border-radius: 999px; width: 0; transition: width .9s cubic-bezier(.2,.8,.2,1); }
+
+/* ============================================================
    ERROR PANEL
    ============================================================ */
 .error-panel {
@@ -173,6 +207,8 @@ h1, h2 { margin: 0; }
    RESPONSIVE
    ============================================================ */
 @media (max-width: 720px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .skills-grid { grid-template-columns: 1fr; }
   .hero-card { flex-direction: column; align-items: center; text-align: center; }
   .profile-facts { justify-content: center; }
   .avatar { width: 96px; height: 96px; }

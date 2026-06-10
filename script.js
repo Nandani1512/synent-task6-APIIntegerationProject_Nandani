@@ -8,6 +8,8 @@
 /* ---------- constants ---------- */
 const API = "https://api.github.com";
 const TOKEN_KEY = "ghpf_token";
+const LANG_FETCH_LIMIT = 30;     // cap per-repo language calls to protect rate limit
+const TOP_LANGS = 8;             // skill bars to show
 
 /* ---------- tiny DOM helpers ---------- */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -42,6 +44,8 @@ function escapeHtml(str) {
 const state = {
   username: "",
   user: null,
+  repos: [],
+  languages: {},   // { lang: bytes }
 };
 
 /* ============================================================
@@ -123,13 +127,44 @@ async function generate(username) {
   showSkeleton(true);
 
   try {
-    // Parallel fetch with Promise.all (more endpoints are added in later phases).
-    const [user] = await Promise.all([
+    // --- PARALLEL fetch with Promise.all (more endpoints added in later phases) ---
+    const [user, repos] = await Promise.all([
       ghFetch(`/users/${encodeURIComponent(username)}`),
+      ghFetch(`/users/${encodeURIComponent(username)}/repos?sort=stars&per_page=100`),
     ]);
 
+    // --- PARALLEL fetch of per-repo language byte counts (top repos only) ---
+    const langTargets = [...repos]
+      .sort((a, b) => (b.stargazers_count || 0) - (a.stargazers_count || 0))
+      .slice(0, LANG_FETCH_LIMIT);
+
+    const langResults = await Promise.all(
+      langTargets.map((r) =>
+        ghFetch(`/repos/${r.owner.login}/${encodeURIComponent(r.name)}/languages`)
+          .catch(() => ({}))   // one failed repo must not sink the whole portfolio
+      )
+    );
+
+    // tally byte counts across all fetched repos
+    const languages = {};
+    for (const map of langResults) {
+      for (const [lang, bytes] of Object.entries(map)) {
+        languages[lang] = (languages[lang] || 0) + bytes;
+      }
+    }
+    // fall back to the primary `language` field for repos beyond the cap
+    for (const r of repos.slice(LANG_FETCH_LIMIT)) {
+      if (r.language) languages[r.language] = (languages[r.language] || 0) + 1;
+    }
+
     state.user = user;
+    state.repos = repos;
+    state.languages = languages;
+
+    $("#portfolio").hidden = false;
     renderHero(user);
+    renderStats(user, repos);
+    renderSkills(languages);
   } catch (err) {
     showError(err);
   } finally {
@@ -168,11 +203,78 @@ function renderHero(user) {
 }
 
 /* ============================================================
+   RENDER: STATS  (animated count-up)
+   ============================================================ */
+function renderStats(user, repos) {
+  const totalStars = repos.reduce((s, r) => s + (r.stargazers_count || 0), 0);
+  animateCounter($('[data-stat="repos"]'), user.public_repos ?? repos.length);
+  animateCounter($('[data-stat="stars"]'), totalStars);
+  animateCounter($('[data-stat="followers"]'), user.followers ?? 0);
+  animateCounter($('[data-stat="following"]'), user.following ?? 0);
+}
+
+/** Count up from 0 to target with an easeOutCubic curve. */
+function animateCounter(node, target) {
+  target = Number(target) || 0;
+  const duration = 900;
+  const start = performance.now();
+  function tick(now) {
+    const p = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    node.textContent = Math.round(eased * target).toLocaleString();
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ============================================================
+   RENDER: SKILLS  (top languages with % bars)
+   ============================================================ */
+const LANG_COLORS = {
+  JavaScript: "#f1e05a", TypeScript: "#3178c6", Python: "#3572A5", Java: "#b07219",
+  HTML: "#e34c26", CSS: "#563d7c", "C++": "#f34b7d", C: "#555555", "C#": "#178600",
+  Go: "#00ADD8", Rust: "#dea584", Ruby: "#701516", PHP: "#4F5D95", Swift: "#F05138",
+  Kotlin: "#A97BFF", Shell: "#89e051", Vue: "#41b883", Dart: "#00B4AB",
+  "Jupyter Notebook": "#DA5B0B", Scala: "#c22d40", Elixir: "#6e4a7e",
+};
+function langColor(name) { return LANG_COLORS[name] || "#8b949e"; }
+
+function renderSkills(languages) {
+  const body = $("#skillsBody");
+  body.replaceChildren();
+
+  const entries = Object.entries(languages).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) {
+    body.appendChild(el("p", { class: "hint", text: "No language data available." }));
+    return;
+  }
+  const total = entries.reduce((s, [, b]) => s + b, 0);
+  const top = entries.slice(0, TOP_LANGS);
+
+  for (const [name, bytes] of top) {
+    const pct = (bytes / total) * 100;
+    const pctText = pct >= 10 ? pct.toFixed(0) : pct.toFixed(1);
+    const fill = el("div", { class: "skill-fill" });
+    fill.style.background = langColor(name);
+
+    body.appendChild(el("div", { class: "skill" }, [
+      el("div", { class: "skill-head" }, [
+        el("span", { class: "skill-name", text: name }),
+        el("span", { class: "skill-pct", text: `${pctText}%` }),
+      ]),
+      el("div", { class: "skill-bar" }, [fill]),
+    ]));
+    // animate the bar width in after paint
+    requestAnimationFrame(() => { fill.style.width = `${pct}%`; });
+  }
+}
+
+/* ============================================================
    LOADING / ERROR STATES
    ============================================================ */
 function showSkeleton(on) {
   $("#heroSkeleton").hidden = !on;
-  if (on) $("#heroCard").hidden = true;
+  if (on) { $("#heroCard").hidden = true; $("#portfolio").hidden = true; }
   $("#generateBtn").disabled = on;
   $("#generateBtn").textContent = on ? "Loading…" : "Generate";
 }
@@ -195,6 +297,7 @@ function showError(err) {
   $("#errorMessage").textContent = p.msg;
 
   $("#heroCard").hidden = true;
+  $("#portfolio").hidden = true;
   panel.hidden = false;
 }
 function hideError() { $("#errorPanel").hidden = true; }

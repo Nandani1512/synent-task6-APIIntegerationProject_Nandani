@@ -76,8 +76,22 @@
       <button id="retryBtn" class="btn btn-primary">Retry</button>
     </section>
 
-    <!-- Portfolio sections are added in later phases -->
-    <div id="portfolio" hidden></div>
+    <!-- Everything below is only visible once a profile loads -->
+    <div id="portfolio" hidden>
+      <!-- ====================== STATS BAR ====================== -->
+      <section class="stats" id="statsSection" aria-label="Statistics">
+        <div class="stat-card"><div class="stat-num" data-stat="repos">0</div><div class="stat-label">Repositories</div></div>
+        <div class="stat-card"><div class="stat-num" data-stat="stars">0</div><div class="stat-label">Stars Earned</div></div>
+        <div class="stat-card"><div class="stat-num" data-stat="followers">0</div><div class="stat-label">Followers</div></div>
+        <div class="stat-card"><div class="stat-num" data-stat="following">0</div><div class="stat-label">Following</div></div>
+      </section>
+
+      <!-- ====================== SKILLS ====================== -->
+      <section class="panel" id="skillsSection">
+        <h2 class="panel-title">🧩 Skills &amp; Languages</h2>
+        <div id="skillsBody" class="skills-grid"></div>
+      </section>
+    </div>
   </main>
 
   <footer class="footer no-print">
