@@ -33,3 +33,20 @@ python -m http.server 8000
 ```
 
 Try `?user=torvalds` in the URL to auto-load a profile.
+
+## Using a GitHub token (optional, raises rate limit 60 → 5,000/hour)
+
+This is a **pure HTML/JS project with no build tool**, so there is no `.env`
+support. A token is **never hardcoded** in committed source. Choose one:
+
+1. **At runtime (simplest):** click the **🔑** button in the top bar, paste your
+   token, and Save. It is stored only in `sessionStorage` for that browser tab.
+2. **Locally, without re-typing:** copy `config.local.example.js` to
+   `config.local.js` and paste your token there. `config.local.js` is listed in
+   `.gitignore`, so it is **never committed or pushed**.
+
+> 🔒 **Security:** never commit a real token, and never paste one into a public
+> chat, screenshot, or issue. If a token is ever exposed, revoke it immediately
+> at https://github.com/settings/tokens and generate a new one. Tokens for this
+> app need **no scopes** (public data only).
+

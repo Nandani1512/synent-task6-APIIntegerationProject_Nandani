@@ -7,6 +7,8 @@
   <link rel="preconnect" href="https://api.github.com" />
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+  <!-- Optional, gitignored: seeds your personal token into sessionStorage. Absent for cloners (harmless). -->
+  <script src="config.local.js" defer onerror="this.remove()"></script>
   <script src="script.js" defer></script>
 </head>
 <body>
@@ -27,10 +29,25 @@
         <span>Dev Portfolio Generator</span>
       </div>
       <div class="topbar-actions">
+        <span id="rateLimit" class="rate-limit" title="GitHub API requests remaining this hour"></span>
+        <button id="tokenBtn" class="icon-btn" title="Set personal access token">🔑</button>
         <button id="themeToggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">🌙</button>
       </div>
     </div>
   </header>
+
+  <!-- Token entry popover -->
+  <div id="tokenPanel" class="token-panel no-print" hidden>
+    <p class="token-help">
+      Optional GitHub <strong>personal access token</strong> raises your rate limit
+      from 60 to 5000 requests/hour. Stored only in this browser session.
+    </p>
+    <div class="token-row">
+      <input id="tokenInput" type="password" placeholder="ghp_…" autocomplete="off" spellcheck="false" />
+      <button id="tokenSave" class="btn btn-primary">Save</button>
+      <button id="tokenClear" class="btn btn-ghost">Clear</button>
+    </div>
+  </div>
 
   <main class="container">
     <!-- ====================== HERO ====================== -->
@@ -130,6 +147,43 @@
       <section class="panel" id="feedSection">
         <h2 class="panel-title">⚡ Recent Activity</h2>
         <ul id="feedBody" class="feed"></ul>
+      </section>
+
+      <!-- ====================== EXPORT ====================== -->
+      <section class="panel export no-print" id="exportSection">
+        <h2 class="panel-title">📤 Share &amp; Export</h2>
+        <div class="export-actions">
+          <button id="shareBtn" class="btn btn-primary">🔗 Copy Shareable Link</button>
+          <button id="pdfBtn" class="btn btn-ghost">🖨️ Export as PDF</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Full-portfolio skeleton (shown during fetch) -->
+    <div id="portfolioSkeleton" hidden>
+      <section class="stats">
+        <div class="stat-card"><div class="skl skl-line w50"></div><div class="skl skl-line w70"></div></div>
+        <div class="stat-card"><div class="skl skl-line w50"></div><div class="skl skl-line w70"></div></div>
+        <div class="stat-card"><div class="skl skl-line w50"></div><div class="skl skl-line w70"></div></div>
+        <div class="stat-card"><div class="skl skl-line w50"></div><div class="skl skl-line w70"></div></div>
+      </section>
+      <section class="panel">
+        <div class="skl skl-line w30"></div>
+        <div class="skills-grid">
+          <div class="skl skl-line"></div><div class="skl skl-line"></div>
+          <div class="skl skl-line"></div><div class="skl skl-line"></div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="skl skl-line w30"></div>
+        <div class="repos-grid">
+          <div class="skl skl-card"></div><div class="skl skl-card"></div>
+          <div class="skl skl-card"></div><div class="skl skl-card"></div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="skl skl-line w30"></div>
+        <div class="skl skl-heatmap"></div>
       </section>
     </div>
   </main>

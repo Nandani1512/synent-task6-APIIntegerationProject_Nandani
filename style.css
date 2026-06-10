@@ -93,6 +93,26 @@ h1, h2 { margin: 0; }
 }
 .icon-btn:hover { background: var(--border); }
 .icon-btn:active { transform: scale(.94); }
+.rate-limit {
+  font-size: 12px; color: var(--text-dim);
+  padding: 4px 10px; border: 1px solid var(--border);
+  border-radius: 999px; white-space: nowrap;
+}
+.rate-limit.low { color: var(--danger); border-color: var(--danger); }
+.rate-limit:empty { display: none; }
+
+/* Token panel */
+.token-panel {
+  max-width: 1040px; margin: 0 auto; padding: 14px 20px;
+  background: var(--bg-elev); border-bottom: 1px solid var(--border);
+}
+.token-help { margin: 0 0 10px; font-size: 13px; color: var(--text-dim); }
+.token-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.token-row input {
+  flex: 1 1 240px; min-width: 0;
+  padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font-size: 14px;
+}
 
 /* ============================================================
    BUTTONS
@@ -251,6 +271,11 @@ h1, h2 { margin: 0; }
 .feed-time { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 
 /* ============================================================
+   EXPORT
+   ============================================================ */
+.export-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+
+/* ============================================================
    ERROR PANEL
    ============================================================ */
 .error-panel {
@@ -277,6 +302,8 @@ h1, h2 { margin: 0; }
 @keyframes shimmer { 100% { transform: translateX(100%); } }
 .skl-line { height: 14px; margin: 8px 0; width: 100%; }
 .skl-avatar { width: 120px; height: 120px; border-radius: 50%; flex-shrink: 0; }
+.skl-card { height: 120px; }
+.skl-heatmap { height: 120px; width: 100%; }
 .w25 { width: 25%; } .w30 { width: 30%; } .w40 { width: 40%; }
 .w50 { width: 50%; } .w70 { width: 70%; }
 
@@ -307,8 +334,19 @@ h1, h2 { margin: 0; }
 }
 
 /* ============================================================
-   PRINT  (expanded in Phase 5)
+   PRINT  (PDF export — clean, light, portfolio-only layout)
    ============================================================ */
 @media print {
+  :root, [data-theme="dark"] {
+    --bg: #ffffff; --bg-elev: #ffffff; --bg-sunken: #f0f0f0;
+    --text: #000; --text-dim: #444; --border: #ccc; --shadow: none;
+  }
   .no-print { display: none !important; }
+  .topbar, .token-panel, .footer, #errorPanel, .search,
+  #exportSection, .repo-pin, .heat-tooltip { display: none !important; }
+  body { background: #fff; }
+  .container { max-width: 100%; padding: 0; }
+  .panel, .stat-card, .hero-card { break-inside: avoid; box-shadow: none; }
+  a { color: #000; }
+  .heatmap-wrap { overflow: visible; }
 }

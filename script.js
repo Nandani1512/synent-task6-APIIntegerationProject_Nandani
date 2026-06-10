@@ -81,6 +81,25 @@ $("#themeToggle").addEventListener("click", () => {
    ============================================================ */
 function getToken() { return sessionStorage.getItem(TOKEN_KEY) || ""; }
 
+$("#tokenBtn").addEventListener("click", () => {
+  const panel = $("#tokenPanel");
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) { $("#tokenInput").value = getToken(); $("#tokenInput").focus(); }
+});
+$("#tokenSave").addEventListener("click", () => {
+  const v = $("#tokenInput").value.trim();
+  if (v) sessionStorage.setItem(TOKEN_KEY, v); else sessionStorage.removeItem(TOKEN_KEY);
+  $("#tokenPanel").hidden = true;
+  toast(v ? "Token saved for this session" : "Token cleared");
+  // re-fetch the current profile with the new (higher) limit
+  if (state.username) { sessionStorage.removeItem(CACHE_KEY(state.username)); generate(state.username); }
+});
+$("#tokenClear").addEventListener("click", () => {
+  sessionStorage.removeItem(TOKEN_KEY);
+  $("#tokenInput").value = "";
+  toast("Token cleared");
+});
+
 /* ============================================================
    FETCH LAYER
    ============================================================ */
@@ -108,6 +127,7 @@ async function ghFetch(path) {
   } catch (err) {
     throw new GHError("network", "Network request failed. Check your connection.", 0);
   }
+  updateRateLimit(res.headers);
 
   if (res.ok) return res.json();
 
@@ -118,6 +138,16 @@ async function ghFetch(path) {
     throw new GHError("http", "Access forbidden by GitHub (403).", res.status);
   }
   throw new GHError("http", `GitHub returned an unexpected status (${res.status}).`, res.status);
+}
+
+/** Read X-RateLimit-Remaining / -Limit from a response and reflect it in the top bar. */
+function updateRateLimit(headers) {
+  const remaining = headers.get("X-RateLimit-Remaining");
+  const limit = headers.get("X-RateLimit-Limit");
+  if (remaining == null) return;
+  const node = $("#rateLimit");
+  node.textContent = `API: ${remaining}/${limit ?? "?"} left`;
+  node.classList.toggle("low", Number(remaining) <= 5);
 }
 
 /* ============================================================
@@ -600,6 +630,7 @@ function timeAgo(dateStr) {
    ============================================================ */
 function showSkeleton(on) {
   $("#heroSkeleton").hidden = !on;
+  $("#portfolioSkeleton").hidden = !on;
   if (on) { $("#heroCard").hidden = true; $("#portfolio").hidden = true; }
   $("#generateBtn").disabled = on;
   $("#generateBtn").textContent = on ? "Loading…" : "Generate";
@@ -611,7 +642,7 @@ function showError(err) {
 
   const presets = {
     notfound:  { icon: "🔍", title: "User not found", msg: `No GitHub user named “${state.username}”. Check the spelling and try again.` },
-    ratelimit: { icon: "⏳", title: "Rate limit reached", msg: "You've hit GitHub's unauthenticated limit (60/hour). A personal access token (added in a later phase) raises it to 5,000/hour." },
+    ratelimit: { icon: "⏳", title: "Rate limit reached", msg: "You've hit GitHub's unauthenticated limit (60/hour). Add a personal access token via the 🔑 button to raise it to 5,000/hour, then retry." },
     network:   { icon: "📡", title: "Network error", msg: "Couldn't reach GitHub. Check your internet connection and retry." },
     http:      { icon: "⚠️", title: "Something went wrong", msg: err.message || "An unexpected error occurred." },
   };
@@ -629,7 +660,11 @@ function showError(err) {
 function hideError() { $("#errorPanel").hidden = true; }
 
 $("#retryBtn").addEventListener("click", () => {
-  if (state.username) generate(state.username);
+  // a fresh attempt should bypass any stale cache for this user
+  if (state.username) {
+    sessionStorage.removeItem(CACHE_KEY(state.username));
+    generate(state.username);
+  }
 });
 
 /* ============================================================
@@ -640,6 +675,34 @@ function setShareParam(username) {
   url.searchParams.set("user", username);
   history.replaceState(null, "", url);
 }
+
+/* ============================================================
+   SHARE URL + PDF EXPORT
+   ============================================================ */
+$("#shareBtn").addEventListener("click", async () => {
+  const url = new URL(window.location.href);
+  url.searchParams.set("user", state.username);
+  const link = url.toString();
+  try {
+    await navigator.clipboard.writeText(link);
+    flashButton($("#shareBtn"), "✓ Copied!");
+    toast("Shareable link copied to clipboard");
+  } catch {
+    // clipboard API unavailable (e.g. file://) — fall back to a prompt
+    window.prompt("Copy this shareable link:", link);
+  }
+});
+
+/** Briefly swap a button's label to give visual confirmation. */
+function flashButton(btn, msg) {
+  const original = btn.textContent;
+  btn.textContent = msg;
+  btn.disabled = true;
+  setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1600);
+}
+
+// PDF export uses the browser's print dialog + the @media print stylesheet.
+$("#pdfBtn").addEventListener("click", () => window.print());
 
 /* ============================================================
    TOAST

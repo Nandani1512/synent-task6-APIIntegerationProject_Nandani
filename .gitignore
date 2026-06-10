@@ -9,3 +9,4 @@ node_modules/
 # Local env / secrets — never commit your GitHub token
 .env
 *.local
+config.local.js
