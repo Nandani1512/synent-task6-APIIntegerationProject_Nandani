@@ -6,6 +6,7 @@
   <title>GitHub Dev Portfolio Generator</title>
   <link rel="preconnect" href="https://api.github.com" />
   <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
   <script src="script.js" defer></script>
 </head>
 <body>
@@ -96,6 +97,39 @@
       <section class="panel" id="reposSection">
         <h2 class="panel-title">📌 Repositories <span class="hint no-print">(click the pin to feature a repo)</span></h2>
         <div id="reposBody" class="repos-grid"></div>
+      </section>
+
+      <!-- ====================== HEATMAP ====================== -->
+      <section class="panel" id="heatmapSection">
+        <h2 class="panel-title">🔥 Contribution Activity <span class="hint">(last 12 months of public push events)</span></h2>
+        <div class="heatmap-wrap">
+          <div id="heatmap" class="heatmap" role="img" aria-label="Contribution heatmap"></div>
+          <div class="heatmap-legend">
+            <span>Less</span>
+            <span class="lvl lvl-0"></span><span class="lvl lvl-1"></span>
+            <span class="lvl lvl-2"></span><span class="lvl lvl-3"></span><span class="lvl lvl-4"></span>
+            <span>More</span>
+          </div>
+        </div>
+        <div id="heatTooltip" class="heat-tooltip" hidden></div>
+      </section>
+
+      <!-- ====================== STREAKS ====================== -->
+      <section class="stats streaks" id="streaksSection" aria-label="Streaks">
+        <div class="stat-card"><div class="stat-num" data-stat="current">0</div><div class="stat-label">🔥 Current Streak (days)</div></div>
+        <div class="stat-card"><div class="stat-num" data-stat="longest">0</div><div class="stat-label">🏆 Longest Streak (days)</div></div>
+      </section>
+
+      <!-- ====================== COMMIT CHART ====================== -->
+      <section class="panel" id="chartSection">
+        <h2 class="panel-title">📊 Commit Activity <span class="hint">(pushes per day, last 30 days)</span></h2>
+        <div class="chart-wrap"><canvas id="commitChart" height="120"></canvas></div>
+      </section>
+
+      <!-- ====================== ACTIVITY FEED ====================== -->
+      <section class="panel" id="feedSection">
+        <h2 class="panel-title">⚡ Recent Activity</h2>
+        <ul id="feedBody" class="feed"></ul>
       </section>
     </div>
   </main>

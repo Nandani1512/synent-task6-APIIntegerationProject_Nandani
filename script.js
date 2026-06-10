@@ -10,6 +10,7 @@ const API = "https://api.github.com";
 const TOKEN_KEY = "ghpf_token";
 const LANG_FETCH_LIMIT = 8;      // cap per-repo language calls to protect the 60/hr rate limit
 const TOP_LANGS = 8;             // skill bars to show
+const HEAT_WEEKS = 53;           // columns in the contribution heatmap
 const PIN_KEY = (u) => `ghpf_pins_${u.toLowerCase()}`;
 const CACHE_KEY = (u) => `ghpf_cache_${u.toLowerCase()}`;
 
@@ -48,7 +49,9 @@ const state = {
   user: null,
   repos: [],
   languages: {},   // { lang: bytes }
+  events: [],
   pins: new Set(),
+  chart: null,
 };
 
 /* ============================================================
@@ -68,6 +71,8 @@ $("#themeToggle").addEventListener("click", () => {
   document.documentElement.dataset.theme = next;
   sessionStorage.setItem("ghpf_theme", next);
   syncThemeIcon();
+  // redraw the chart so its colours follow the new theme
+  if (state.events.length) renderCommitChart(state.events);
 });
 
 /* ============================================================
@@ -139,10 +144,11 @@ async function generate(username) {
   }
 
   try {
-    // --- PARALLEL fetch with Promise.all (more endpoints added in later phases) ---
-    const [user, repos] = await Promise.all([
+    // --- PARALLEL fetch with Promise.all of the three primary endpoints ---
+    const [user, repos, events] = await Promise.all([
       ghFetch(`/users/${encodeURIComponent(username)}`),
       ghFetch(`/users/${encodeURIComponent(username)}/repos?sort=stars&per_page=100`),
+      ghFetch(`/users/${encodeURIComponent(username)}/events/public?per_page=100`),
     ]);
 
     // --- PARALLEL fetch of per-repo language byte counts (top repos only) ---
@@ -169,7 +175,7 @@ async function generate(username) {
       if (r.language) languages[r.language] = (languages[r.language] || 0) + 1;
     }
 
-    const data = { user, repos, languages };
+    const data = { user, repos, languages, events };
     writeCache(username, data);
     applyData(data, username);
   } catch (err) {
@@ -184,6 +190,7 @@ function applyData(data, username) {
   state.user = data.user;
   state.repos = data.repos;
   state.languages = data.languages;
+  state.events = data.events || [];
   state.pins = loadPins(username);
 
   $("#portfolio").hidden = false;
@@ -191,6 +198,10 @@ function applyData(data, username) {
   renderStats(data.user, data.repos);
   renderSkills(data.languages);
   renderRepos(data.repos);
+  renderHeatmap(state.events);
+  renderStreaks(state.events);
+  renderCommitChart(state.events);
+  renderFeed(state.events);
 }
 
 /* ============================================================
@@ -374,6 +385,217 @@ function togglePin(id) {
 }
 
 /* ============================================================
+   PUSH-EVENT HELPERS  (shared by heatmap + streaks + chart)
+   ============================================================ */
+/** Local YYYY-MM-DD for a Date. */
+function ymd(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Map of YYYY-MM-DD -> number of push events that day. */
+function buildPushMap(events) {
+  const map = new Map();
+  for (const ev of events) {
+    if (ev.type !== "PushEvent") continue;
+    const key = ev.created_at.slice(0, 10);    // already YYYY-MM-DD (UTC)
+    map.set(key, (map.get(key) || 0) + 1);
+  }
+  return map;
+}
+
+/** 5 intensity buckets: 0, 1-2, 3-5, 6-9, 10+. */
+function heatLevel(count) {
+  if (count <= 0) return 0;
+  if (count <= 2) return 1;
+  if (count <= 5) return 2;
+  if (count <= 9) return 3;
+  return 4;
+}
+
+/* ============================================================
+   RENDER: HEATMAP  (53 weeks x 7 days)
+   ============================================================ */
+function renderHeatmap(events) {
+  const map = buildPushMap(events);
+  const grid = $("#heatmap");
+  grid.replaceChildren();
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  // start = today minus (HEAT_WEEKS-1) weeks, then walk back to that week's Sunday
+  const start = new Date(today);
+  start.setDate(start.getDate() - (HEAT_WEEKS - 1) * 7);
+  start.setDate(start.getDate() - start.getDay()); // 0 = Sunday
+
+  // Iterating dates ascending fills the grid column-by-column (grid-auto-flow: column, 7 rows).
+  for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+    const key = ymd(d);
+    const count = map.get(key) || 0;
+    const cell = el("div", {
+      class: `heat-cell lvl-${heatLevel(count)}`,
+      dataset: { date: key, count: String(count) },
+    });
+    cell.addEventListener("mouseenter", showHeatTooltip);
+    cell.addEventListener("mousemove", showHeatTooltip);
+    cell.addEventListener("mouseleave", hideHeatTooltip);
+    grid.appendChild(cell);
+  }
+}
+
+function showHeatTooltip(e) {
+  const t = $("#heatTooltip");
+  const { date, count } = e.target.dataset;
+  const nice = new Date(date + "T00:00:00").toLocaleDateString(undefined, {
+    weekday: "short", month: "short", day: "numeric", year: "numeric",
+  });
+  const n = Number(count);
+  t.textContent = `${n} push event${n === 1 ? "" : "s"} · ${nice}`;
+  t.hidden = false;
+  t.style.left = `${e.clientX}px`;
+  t.style.top = `${e.clientY}px`;
+}
+function hideHeatTooltip() { $("#heatTooltip").hidden = true; }
+
+/* ============================================================
+   RENDER: STREAKS
+   ============================================================ */
+function renderStreaks(events) {
+  const map = buildPushMap(events);
+
+  // ---- current streak: walk backwards from today (1-day grace if today empty) ----
+  let current = 0;
+  const cursor = new Date(); cursor.setHours(0, 0, 0, 0);
+  if (!map.has(ymd(cursor)) && map.size) {
+    cursor.setDate(cursor.getDate() - 1); // allow "haven't pushed yet today"
+  }
+  while (map.has(ymd(cursor))) {
+    current++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  // ---- longest streak: scan sorted unique days for the longest consecutive run ----
+  const days = [...map.keys()].sort();
+  let longest = 0, run = 0, prev = null;
+  for (const key of days) {
+    const d = new Date(key + "T00:00:00");
+    if (prev && (d - prev) === 86400000) run++;
+    else run = 1;
+    longest = Math.max(longest, run);
+    prev = d;
+  }
+
+  animateCounter($('[data-stat="current"]'), current);
+  animateCounter($('[data-stat="longest"]'), longest);
+}
+
+/* ============================================================
+   RENDER: COMMIT ACTIVITY CHART  (Chart.js)
+   ============================================================ */
+function renderCommitChart(events) {
+  const canvas = $("#commitChart");
+  if (!window.Chart) return; // CDN not ready yet — redrawn on window 'load' below
+
+  // build last-30-days buckets of push counts (sum of commits in each push payload)
+  const byDay = new Map();
+  for (const ev of events) {
+    if (ev.type !== "PushEvent") continue;
+    const key = ev.created_at.slice(0, 10);
+    const commits = (ev.payload && ev.payload.commits && ev.payload.commits.length) || 1;
+    byDay.set(key, (byDay.get(key) || 0) + commits);
+  }
+
+  const labels = [], counts = [];
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    labels.push(d.toLocaleDateString(undefined, { month: "short", day: "numeric" }));
+    counts.push(byDay.get(ymd(d)) || 0);
+  }
+
+  const styles = getComputedStyle(document.documentElement);
+  const accent = styles.getPropertyValue("--accent").trim() || "#2f81f7";
+  const grid = styles.getPropertyValue("--border").trim() || "#30363d";
+  const textDim = styles.getPropertyValue("--text-dim").trim() || "#8b949e";
+
+  if (state.chart) state.chart.destroy();
+  state.chart = new Chart(canvas, {
+    type: "bar",
+    data: { labels, datasets: [{ label: "Commits", data: counts, backgroundColor: accent, borderRadius: 4, maxBarThickness: 18 }] },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { title: (i) => i[0].label } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: textDim, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
+        y: { beginAtZero: true, ticks: { color: textDim, precision: 0 }, grid: { color: grid } },
+      },
+    },
+  });
+}
+
+/* ============================================================
+   RENDER: ACTIVITY FEED
+   ============================================================ */
+const EVENT_META = {
+  PushEvent: { icon: "⬆️", verb: "pushed to" },
+  PullRequestEvent: { icon: "🔀", verb: "opened a pull request in" },
+  IssuesEvent: { icon: "🐛", verb: "updated an issue in" },
+  ForkEvent: { icon: "🍴", verb: "forked" },
+  WatchEvent: { icon: "⭐", verb: "starred" },
+  CreateEvent: { icon: "✨", verb: "created" },
+  DeleteEvent: { icon: "🗑️", verb: "deleted a ref in" },
+  IssueCommentEvent: { icon: "💬", verb: "commented in" },
+  ReleaseEvent: { icon: "🏷️", verb: "released in" },
+  PublicEvent: { icon: "📢", verb: "open-sourced" },
+};
+
+function renderFeed(events) {
+  const body = $("#feedBody");
+  body.replaceChildren();
+
+  const list = events.slice(0, 10);
+  if (!list.length) {
+    body.appendChild(el("li", { class: "hint", text: "No recent public activity." }));
+    return;
+  }
+
+  for (const ev of list) {
+    const meta = EVENT_META[ev.type] || { icon: "📌", verb: "did something in" };
+    const repoName = ev.repo ? ev.repo.name : "";
+    const repoLink = el("a", {
+      href: `https://github.com/${repoName}`, target: "_blank", rel: "noopener noreferrer", text: repoName,
+    });
+
+    const text = el("div", { class: "feed-text" }, [
+      el("strong", { text: meta.verb }), " ", repoLink,
+    ]);
+
+    body.appendChild(el("li", { class: "feed-item" }, [
+      el("span", { class: "feed-icon", text: meta.icon }),
+      el("div", { class: "feed-main" }, [
+        text,
+        el("div", { class: "feed-time", text: timeAgo(ev.created_at) }),
+      ]),
+    ]));
+  }
+}
+
+/* ============================================================
+   timeAgo — human-readable relative timestamps
+   ============================================================ */
+function timeAgo(dateStr) {
+  const then = new Date(dateStr).getTime();
+  const secs = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  const units = [
+    ["year", 31536000], ["month", 2592000], ["week", 604800],
+    ["day", 86400], ["hour", 3600], ["minute", 60],
+  ];
+  for (const [name, size] of units) {
+    const v = Math.floor(secs / size);
+    if (v >= 1) return `${v} ${name}${v === 1 ? "" : "s"} ago`;
+  }
+  return "just now";
+}
+
+/* ============================================================
    LOADING / ERROR STATES
    ============================================================ */
 function showSkeleton(on) {
@@ -460,4 +682,9 @@ $("#searchForm").addEventListener("submit", (e) => {
 window.addEventListener("DOMContentLoaded", () => {
   const user = new URLSearchParams(window.location.search).get("user");
   if (user) { $("#usernameInput").value = user; generate(user); }
+});
+
+// If Chart.js finishes loading after the data arrived, draw the chart once it's available.
+window.addEventListener("load", () => {
+  if (state.events.length && window.Chart && !state.chart) renderCommitChart(state.events);
 });
