@@ -14,20 +14,22 @@ Try it with a username in the URL:
 
 ## 📸 Screenshots
 
-> Drop your images into the `screenshots/` folder with the exact filenames below
-> and they'll appear here automatically. (See **"How to capture screenshots"** at the bottom.)
-
 ### Dashboard
 ![Dashboard — profile, stats, skills and repositories](screenshots/dashboard.png)
 
-### Contribution heatmap & commit activity
-![Heatmap and commit chart](screenshots/activity.png)
+<!--
+  Add more screenshots when ready (save into screenshots/ then uncomment):
 
-### Light & dark themes
-![Light and dark theme](screenshots/themes.png)
+  ### Contribution heatmap & commit activity
+  ![Heatmap and commit chart](screenshots/activity.png)
 
-### One-page résumé PDF export
-![Exported résumé PDF](screenshots/resume-pdf.png)
+  ### Light & dark themes
+  ![Light and dark theme](screenshots/themes.png)
+
+  ### One-page résumé PDF export
+  ![Exported résumé PDF](screenshots/resume-pdf.png)
+-->
+
 
 ---
 
