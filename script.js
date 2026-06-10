@@ -10,6 +10,8 @@ const API = "https://api.github.com";
 const TOKEN_KEY = "ghpf_token";
 const LANG_FETCH_LIMIT = 30;     // cap per-repo language calls to protect rate limit
 const TOP_LANGS = 8;             // skill bars to show
+const PIN_KEY = (u) => `ghpf_pins_${u.toLowerCase()}`;
+const CACHE_KEY = (u) => `ghpf_cache_${u.toLowerCase()}`;
 
 /* ---------- tiny DOM helpers ---------- */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -46,6 +48,7 @@ const state = {
   user: null,
   repos: [],
   languages: {},   // { lang: bytes }
+  pins: new Set(),
 };
 
 /* ============================================================
@@ -126,6 +129,15 @@ async function generate(username) {
   hideError();
   showSkeleton(true);
 
+  // sessionStorage cache: a repeat lookup this session skips the network entirely.
+  const cached = readCache(username);
+  if (cached) {
+    applyData(cached, username);
+    showSkeleton(false);
+    toast("Loaded from session cache");
+    return;
+  }
+
   try {
     // --- PARALLEL fetch with Promise.all (more endpoints added in later phases) ---
     const [user, repos] = await Promise.all([
@@ -157,19 +169,42 @@ async function generate(username) {
       if (r.language) languages[r.language] = (languages[r.language] || 0) + 1;
     }
 
-    state.user = user;
-    state.repos = repos;
-    state.languages = languages;
-
-    $("#portfolio").hidden = false;
-    renderHero(user);
-    renderStats(user, repos);
-    renderSkills(languages);
+    const data = { user, repos, languages };
+    writeCache(username, data);
+    applyData(data, username);
   } catch (err) {
     showError(err);
   } finally {
     showSkeleton(false);
   }
+}
+
+/** Push a fetched-or-cached data bundle into state and render every section. */
+function applyData(data, username) {
+  state.user = data.user;
+  state.repos = data.repos;
+  state.languages = data.languages;
+  state.pins = loadPins(username);
+
+  $("#portfolio").hidden = false;
+  renderHero(data.user);
+  renderStats(data.user, data.repos);
+  renderSkills(data.languages);
+  renderRepos(data.repos);
+}
+
+/* ============================================================
+   sessionStorage CACHING
+   ============================================================ */
+function readCache(username) {
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY(username));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function writeCache(username, data) {
+  try { sessionStorage.setItem(CACHE_KEY(username), JSON.stringify(data)); }
+  catch { /* quota exceeded — just means we re-fetch next time */ }
 }
 
 /* ============================================================
@@ -267,6 +302,75 @@ function renderSkills(languages) {
     // animate the bar width in after paint
     requestAnimationFrame(() => { fill.style.width = `${pct}%`; });
   }
+}
+
+/* ============================================================
+   RENDER: REPOS  (pin / unpin -> sessionStorage)
+   ============================================================ */
+function loadPins(username) {
+  try {
+    const raw = sessionStorage.getItem(PIN_KEY(username));
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch { return new Set(); }
+}
+function savePins() {
+  sessionStorage.setItem(PIN_KEY(state.username), JSON.stringify([...state.pins]));
+}
+
+function renderRepos(repos) {
+  const body = $("#reposBody");
+  body.replaceChildren();
+
+  if (!repos.length) {
+    body.appendChild(el("p", { class: "hint", text: "No public repositories." }));
+    return;
+  }
+
+  // pinned first (in star order), then the rest by stars
+  const sorted = [...repos].sort((a, b) => (b.stargazers_count || 0) - (a.stargazers_count || 0));
+  const pinned = sorted.filter((r) => state.pins.has(r.id));
+  const rest = sorted.filter((r) => !state.pins.has(r.id));
+  const visible = [...pinned, ...rest].slice(0, Math.max(6, pinned.length + 6));
+
+  for (const r of visible) body.appendChild(repoCard(r));
+}
+
+function repoCard(r) {
+  const isPinned = state.pins.has(r.id);
+
+  const pinBtn = el("button", {
+    class: `repo-pin ${isPinned ? "active" : ""}`,
+    title: isPinned ? "Unpin" : "Pin",
+    "aria-label": isPinned ? "Unpin repository" : "Pin repository",
+    text: isPinned ? "📌" : "📍",
+    onclick: () => togglePin(r.id),
+  });
+
+  const foot = el("div", { class: "repo-foot" });
+  if (r.language) {
+    const dot = el("span", { class: "lang-dot" });
+    dot.style.background = langColor(r.language);
+    foot.appendChild(el("span", { class: "lang-badge" }, [dot, el("span", { text: r.language })]));
+  }
+  foot.appendChild(el("span", { text: `★ ${(r.stargazers_count || 0).toLocaleString()}` }));
+  foot.appendChild(el("span", { text: `⑂ ${(r.forks_count || 0).toLocaleString()}` }));
+
+  const children = [];
+  if (isPinned) children.push(el("div", { class: "pinned-label", text: "📌 Pinned" }));
+  children.push(pinBtn);
+  children.push(el("a", {
+    class: "repo-name", href: r.html_url, target: "_blank", rel: "noopener noreferrer", text: r.name,
+  }));
+  children.push(el("p", { class: "repo-desc", text: r.description || "No description provided." }));
+  children.push(foot);
+
+  return el("div", { class: `repo-card ${isPinned ? "pinned" : ""}` }, children);
+}
+
+function togglePin(id) {
+  if (state.pins.has(id)) state.pins.delete(id); else state.pins.add(id);
+  savePins();
+  renderRepos(state.repos);
 }
 
 /* ============================================================
