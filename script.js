@@ -13,6 +13,7 @@ const TOP_LANGS = 8;             // skill bars to show
 const HEAT_WEEKS = 53;           // columns in the contribution heatmap
 const PIN_KEY = (u) => `ghpf_pins_${u.toLowerCase()}`;
 const CACHE_KEY = (u) => `ghpf_cache_${u.toLowerCase()}`;
+const RESUME_KEY = (u) => `ghpf_resume_${u.toLowerCase()}`;   // localStorage — persists across sessions
 
 /* ---------- tiny DOM helpers ---------- */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -49,6 +50,7 @@ const state = {
   user: null,
   repos: [],
   languages: {},   // { lang: bytes }
+  repoLangs: {},   // { repoId: [topLang, …] }
   events: [],
   pins: new Set(),
   chart: null,
@@ -77,9 +79,14 @@ $("#themeToggle").addEventListener("click", () => {
 
 /* ============================================================
    TOKEN HANDLING (raises rate limit 60 -> 5000)
-   Stored in sessionStorage; UI to manage it is added in Phase 5.
+   Token is OPTIONAL — the app works for everyone without one.
+   Read from localStorage (persists across sessions) OR sessionStorage
+   (used by config.local.js). Saving via the 🔑 panel uses localStorage
+   so you only paste it once, ever.
    ============================================================ */
-function getToken() { return sessionStorage.getItem(TOKEN_KEY) || ""; }
+function getToken() {
+  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY) || "";
+}
 
 $("#tokenBtn").addEventListener("click", () => {
   const panel = $("#tokenPanel");
@@ -88,13 +95,14 @@ $("#tokenBtn").addEventListener("click", () => {
 });
 $("#tokenSave").addEventListener("click", () => {
   const v = $("#tokenInput").value.trim();
-  if (v) sessionStorage.setItem(TOKEN_KEY, v); else sessionStorage.removeItem(TOKEN_KEY);
+  if (v) localStorage.setItem(TOKEN_KEY, v); else localStorage.removeItem(TOKEN_KEY);
   $("#tokenPanel").hidden = true;
-  toast(v ? "Token saved for this session" : "Token cleared");
+  toast(v ? "Token saved (persists on this device)" : "Token cleared");
   // re-fetch the current profile with the new (higher) limit
   if (state.username) { sessionStorage.removeItem(CACHE_KEY(state.username)); generate(state.username); }
 });
 $("#tokenClear").addEventListener("click", () => {
+  localStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
   $("#tokenInput").value = "";
   toast("Token cleared");
@@ -195,17 +203,21 @@ async function generate(username) {
 
     // tally byte counts across all fetched repos
     const languages = {};
-    for (const map of langResults) {
+    const repoLangs = {};   // per-repo top languages, for the résumé project cards
+    langTargets.forEach((repo, i) => {
+      const map = langResults[i] || {};
+      const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]).map(([k]) => k);
+      repoLangs[repo.id] = sorted.length ? sorted : (repo.language ? [repo.language] : []);
       for (const [lang, bytes] of Object.entries(map)) {
         languages[lang] = (languages[lang] || 0) + bytes;
       }
-    }
+    });
     // fall back to the primary `language` field for repos beyond the cap
     for (const r of repos.slice(LANG_FETCH_LIMIT)) {
       if (r.language) languages[r.language] = (languages[r.language] || 0) + 1;
     }
 
-    const data = { user, repos, languages, events };
+    const data = { user, repos, languages, repoLangs, events };
     writeCache(username, data);
     applyData(data, username);
   } catch (err) {
@@ -220,6 +232,7 @@ function applyData(data, username) {
   state.user = data.user;
   state.repos = data.repos;
   state.languages = data.languages;
+  state.repoLangs = data.repoLangs || {};
   state.events = data.events || [];
   state.pins = loadPins(username);
 
@@ -232,6 +245,9 @@ function applyData(data, username) {
   renderStreaks(state.events);
   renderCommitChart(state.events);
   renderFeed(state.events);
+
+  loadResumeIntoForm(username);   // prefill the editor (API data + any saved details)
+  renderResume();                 // build the print-only résumé
 }
 
 /* ============================================================
@@ -488,31 +504,30 @@ function hideHeatTooltip() { $("#heatTooltip").hidden = true; }
 /* ============================================================
    RENDER: STREAKS
    ============================================================ */
-function renderStreaks(events) {
+/** Compute { current, longest } push-day streaks from a push-count Map. */
+function computeStreaks(events) {
   const map = buildPushMap(events);
 
-  // ---- current streak: walk backwards from today (1-day grace if today empty) ----
+  // current streak: walk backwards from today (1-day grace if today is empty)
   let current = 0;
   const cursor = new Date(); cursor.setHours(0, 0, 0, 0);
-  if (!map.has(ymd(cursor)) && map.size) {
-    cursor.setDate(cursor.getDate() - 1); // allow "haven't pushed yet today"
-  }
-  while (map.has(ymd(cursor))) {
-    current++;
-    cursor.setDate(cursor.getDate() - 1);
-  }
+  if (!map.has(ymd(cursor)) && map.size) cursor.setDate(cursor.getDate() - 1);
+  while (map.has(ymd(cursor))) { current++; cursor.setDate(cursor.getDate() - 1); }
 
-  // ---- longest streak: scan sorted unique days for the longest consecutive run ----
+  // longest streak: scan sorted unique days for the longest consecutive run
   const days = [...map.keys()].sort();
   let longest = 0, run = 0, prev = null;
   for (const key of days) {
     const d = new Date(key + "T00:00:00");
-    if (prev && (d - prev) === 86400000) run++;
-    else run = 1;
+    if (prev && (d - prev) === 86400000) run++; else run = 1;
     longest = Math.max(longest, run);
     prev = d;
   }
+  return { current, longest, activeDays: map.size };
+}
 
+function renderStreaks(events) {
+  const { current, longest } = computeStreaks(events);
   animateCounter($('[data-stat="current"]'), current);
   animateCounter($('[data-stat="longest"]'), longest);
 }
@@ -702,7 +717,248 @@ function flashButton(btn, msg) {
 }
 
 // PDF export uses the browser's print dialog + the @media print stylesheet.
-$("#pdfBtn").addEventListener("click", () => window.print());
+$("#pdfBtn").addEventListener("click", () => { renderResume(); window.print(); });
+
+/* ============================================================
+   RÉSUMÉ  (print-only one-page developer summary)
+   Combines human-written details (localStorage) with live GitHub data.
+   ============================================================ */
+const RESUME_FIELDS = ["title", "email", "location", "linkedin", "portfolio",
+  "summary", "lang", "frontend", "backend", "tools", "db", "projects"];
+const RESUME_INPUT = {
+  title: "resTitle", email: "resEmail", location: "resLocation", linkedin: "resLinkedin",
+  portfolio: "resPortfolio", summary: "resSummary", lang: "resLang", frontend: "resFrontend",
+  backend: "resBackend", tools: "resTools", db: "resDb", projects: "resProjects",
+};
+const HEAT_PALETTE = ["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"];
+
+function loadResumeDetails(username) {
+  try {
+    const raw = localStorage.getItem(RESUME_KEY(username));
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+function saveResumeDetails(username, details) {
+  try { localStorage.setItem(RESUME_KEY(username), JSON.stringify(details)); } catch {}
+}
+
+/** Prefill the editor form: saved values first, else sensible GitHub-derived defaults. */
+function loadResumeIntoForm(username) {
+  const saved = loadResumeDetails(username);
+  const u = state.user || {};
+  const topLangs = Object.entries(state.languages).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k]) => k);
+
+  const defaults = {
+    title: "", email: u.email || "", location: u.location || "",
+    linkedin: "", portfolio: u.blog || "", summary: u.bio || "",
+    lang: topLangs.join(", "), frontend: "", backend: "", tools: "Git, GitHub", db: "", projects: "",
+  };
+  for (const f of RESUME_FIELDS) {
+    $("#" + RESUME_INPUT[f]).value = saved[f] != null && saved[f] !== "" ? saved[f] : defaults[f];
+  }
+}
+
+function gatherResumeForm() {
+  const out = {};
+  for (const f of RESUME_FIELDS) out[f] = $("#" + RESUME_INPUT[f]).value.trim();
+  return out;
+}
+
+/** Parse "repo | why | a; b; c" lines into { repoNameLower: {why, bullets[]} }. */
+function parseProjectNotes(text) {
+  const map = {};
+  for (const line of (text || "").split("\n")) {
+    if (!line.trim()) continue;
+    const [name, why, bullets] = line.split("|").map((s) => (s || "").trim());
+    if (!name) continue;
+    map[name.toLowerCase()] = {
+      why: why || "",
+      bullets: (bullets || "").split(";").map((b) => b.trim()).filter(Boolean),
+    };
+  }
+  return map;
+}
+
+/* ---- résumé panel wiring ---- */
+$("#resumeBtn").addEventListener("click", () => {
+  const p = $("#resumePanel");
+  p.hidden = !p.hidden;
+  if (!p.hidden) loadResumeIntoForm(state.username);
+});
+$("#resClose").addEventListener("click", () => { $("#resumePanel").hidden = true; });
+$("#resSave").addEventListener("click", () => {
+  saveResumeDetails(state.username, gatherResumeForm());
+  renderResume();
+  $("#resumePanel").hidden = true;
+  toast("Résumé details saved");
+});
+
+/* ---- build the résumé document ---- */
+function resumeProjects() {
+  const sorted = [...state.repos].sort((a, b) => (b.stargazers_count || 0) - (a.stargazers_count || 0));
+  const pinned = sorted.filter((r) => state.pins.has(r.id));
+  const chosen = (pinned.length ? pinned : sorted).slice(0, 6);
+  return chosen;
+}
+
+function renderResume() {
+  const doc = $("#resumeDoc");
+  doc.replaceChildren();
+  if (!state.user) return;
+
+  const u = state.user;
+  const d = state.username ? { ...loadResumeDetails(state.username) } : {};
+  // merge live form values if the panel is currently open/edited
+  if (!$("#resumePanel").hidden) Object.assign(d, gatherResumeForm());
+
+  const val = (k, fallback = "") => (d[k] && d[k].trim ? d[k].trim() : d[k]) || fallback;
+
+  /* ---------- header ---------- */
+  const name = u.name || u.login;
+  const contact = el("div", { class: "r-contact" });
+  const loc = val("location", u.location || "");
+  if (loc) contact.appendChild(el("span", { text: `📍 ${loc}` }));
+  if (val("email", u.email)) contact.appendChild(el("a", { href: `mailto:${val("email", u.email)}`, text: `✉ ${val("email", u.email)}` }));
+  contact.appendChild(el("a", { href: u.html_url, text: `⌥ github.com/${u.login}` }));
+  if (val("linkedin")) contact.appendChild(el("a", { href: val("linkedin"), text: "in/ LinkedIn" }));
+  if (val("portfolio")) {
+    let url = val("portfolio"); if (!/^https?:\/\//.test(url)) url = "https://" + url;
+    contact.appendChild(el("a", { href: url, text: `🔗 ${val("portfolio").replace(/^https?:\/\//, "")}` }));
+  }
+
+  const header = el("div", { class: "r-header" }, [
+    el("div", { class: "r-name", text: name }),
+    val("title") ? el("div", { class: "r-title", text: val("title") }) : null,
+    contact,
+  ]);
+  doc.appendChild(header);
+
+  /* ---------- summary ---------- */
+  const summary = val("summary", u.bio || "");
+  if (summary) {
+    doc.appendChild(el("div", { class: "r-section" }, [
+      el("h3", { text: "Summary" }),
+      el("div", { class: "r-summary", text: summary }),
+    ]));
+  }
+
+  /* ---------- tech stack (grouped) ---------- */
+  const groups = [
+    ["Languages", val("lang")], ["Frontend", val("frontend")], ["Backend", val("backend")],
+    ["Tools", val("tools")], ["Databases", val("db")],
+  ].filter(([, v]) => v);
+  if (groups.length) {
+    const dl = el("dl", { class: "r-skills" });
+    for (const [label, v] of groups) {
+      dl.appendChild(el("dt", { text: label }));
+      dl.appendChild(el("dd", { text: v }));
+    }
+    doc.appendChild(el("div", { class: "r-section" }, [el("h3", { text: "Tech Stack" }), dl]));
+  }
+
+  /* ---------- GitHub stats snapshot ---------- */
+  doc.appendChild(buildStatsSnapshot());
+
+  /* ---------- projects ---------- */
+  const notes = parseProjectNotes(val("projects"));
+  const projects = resumeProjects();
+  if (projects.length) {
+    const sec = el("div", { class: "r-section" }, [
+      el("h3", { text: state.pins.size ? "Pinned Projects" : "Top Projects" }),
+    ]);
+    for (const r of projects) sec.appendChild(buildProjectCard(r, notes));
+    doc.appendChild(sec);
+  }
+}
+
+function buildStatsSnapshot() {
+  const u = state.user;
+  const totalStars = state.repos.reduce((s, r) => s + (r.stargazers_count || 0), 0);
+  const { current, longest, activeDays } = computeStreaks(state.events);
+
+  const stats = el("div", { class: "r-stats" }, [
+    el("div", { class: "r-stat" }, [el("b", { text: String(u.public_repos ?? state.repos.length) }), el("span", { text: "Repos" })]),
+    el("div", { class: "r-stat" }, [el("b", { text: totalStars.toLocaleString() }), el("span", { text: "Stars" })]),
+    el("div", { class: "r-stat" }, [el("b", { text: String(u.followers ?? 0) }), el("span", { text: "Followers" })]),
+    el("div", { class: "r-stat" }, [el("b", { text: String(longest) }), el("span", { text: "Longest Streak" })]),
+  ]);
+
+  const streakLine = el("div", { class: "r-summary", text:
+    `🔥 Current streak: ${current} day${current === 1 ? "" : "s"}  ·  🏆 Longest: ${longest} days  ·  📅 Active days (recent): ${activeDays}` });
+
+  // language bars (top 6)
+  const langEntries = Object.entries(state.languages).sort((a, b) => b[1] - a[1]);
+  const total = langEntries.reduce((s, [, b]) => s + b, 0) || 1;
+  const langWrap = el("div", { class: "r-langs" });
+  for (const [name, bytes] of langEntries.slice(0, 6)) {
+    const pct = (bytes / total) * 100;
+    const bar = el("i"); bar.style.width = `${pct}%`; bar.style.background = langColor(name);
+    langWrap.appendChild(el("div", { class: "r-lang" }, [
+      el("div", { class: "r-lang-head" }, [
+        el("span", { text: name }), el("span", { text: `${pct >= 10 ? pct.toFixed(0) : pct.toFixed(1)}%` }),
+      ]),
+      el("div", { class: "r-bar" }, [bar]),
+    ]));
+  }
+
+  // mini heatmap
+  const heat = buildMiniHeatmap(state.events);
+
+  return el("div", { class: "r-section" }, [
+    el("h3", { text: "GitHub Activity Snapshot" }),
+    stats, streakLine, langWrap, heat,
+    el("div", { class: "r-summary", text: "Contribution activity (last ~12 months of public pushes)" }),
+  ]);
+}
+
+function buildMiniHeatmap(events) {
+  const map = buildPushMap(events);
+  const grid = el("div", { class: "r-heatmap" });
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = new Date(today);
+  start.setDate(start.getDate() - (HEAT_WEEKS - 1) * 7);
+  start.setDate(start.getDate() - start.getDay());
+  for (let dt = new Date(start); dt <= today; dt.setDate(dt.getDate() + 1)) {
+    const c = el("div", { class: "r-heat-cell" });
+    c.style.background = HEAT_PALETTE[heatLevel(map.get(ymd(dt)) || 0)];
+    grid.appendChild(c);
+  }
+  return grid;
+}
+
+function buildProjectCard(r, notes) {
+  const note = notes[r.name.toLowerCase()] || {};
+  const tech = (state.repoLangs[r.id] && state.repoLangs[r.id].slice(0, 4)) ||
+    (r.language ? [r.language] : []);
+
+  const links = el("span", { class: "r-proj-links" });
+  links.appendChild(el("a", { href: r.html_url, text: "Code" }));
+  let demo = (r.homepage || "").trim();
+  if (demo) {
+    if (!/^https?:\/\//.test(demo)) demo = "https://" + demo;
+    links.appendChild(el("span", { text: " · " }));
+    links.appendChild(el("a", { href: demo, text: "Live Demo" }));
+  }
+
+  const card = el("div", { class: "r-project" }, [
+    el("div", { class: "r-proj-head" }, [
+      el("span", { class: "r-proj-name", text: r.name }), links,
+    ]),
+    el("div", { class: "r-proj-meta", text: `★ ${(r.stargazers_count || 0).toLocaleString()}  ·  ⑂ ${(r.forks_count || 0).toLocaleString()}` }),
+  ]);
+
+  if (r.description) card.appendChild(el("div", { class: "r-proj-desc", text: r.description }));
+  if (note.why) card.appendChild(el("div", { class: "r-proj-why", text: note.why }));
+  if (note.bullets && note.bullets.length) {
+    const ul = el("ul", { class: "r-proj-bullets" });
+    for (const b of note.bullets) ul.appendChild(el("li", { text: b }));
+    card.appendChild(ul);
+  }
+  if (tech.length) {
+    card.appendChild(el("div", { class: "r-tech" }, [el("b", { text: "Tech: " }), tech.join(", ")]));
+  }
+  return card;
+}
 
 /* ============================================================
    TOAST

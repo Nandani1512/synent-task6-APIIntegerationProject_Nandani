@@ -154,7 +154,47 @@
         <h2 class="panel-title">📤 Share &amp; Export</h2>
         <div class="export-actions">
           <button id="shareBtn" class="btn btn-primary">🔗 Copy Shareable Link</button>
-          <button id="pdfBtn" class="btn btn-ghost">🖨️ Export as PDF</button>
+          <button id="resumeBtn" class="btn btn-ghost">✏️ Resume Details</button>
+          <button id="pdfBtn" class="btn btn-ghost">🖨️ Export Resume PDF</button>
+        </div>
+
+        <!-- Resume details editor (human-written parts the API can't provide) -->
+        <div id="resumePanel" class="resume-panel" hidden>
+          <p class="token-help">
+            Fill in the parts GitHub can't auto-detect. Saved to this browser so you only do it once.
+            The PDF combines this with your live GitHub stats, language bars, streaks, heatmap, and pinned repos.
+          </p>
+
+          <div class="form-grid">
+            <label>Title <input id="resTitle" type="text" placeholder="Full Stack Developer" /></label>
+            <label>Email <input id="resEmail" type="text" placeholder="you@example.com" /></label>
+            <label>Location <input id="resLocation" type="text" placeholder="City, Country" /></label>
+            <label>LinkedIn URL <input id="resLinkedin" type="text" placeholder="https://linkedin.com/in/…" /></label>
+            <label>Portfolio / Website <input id="resPortfolio" type="text" placeholder="https://…" /></label>
+          </div>
+
+          <label class="block">Developer summary (3–4 lines)
+            <textarea id="resSummary" rows="3" placeholder="Final-year CS student who builds full-stack web apps. 2+ years with JavaScript and Python. Looking for a frontend/full-stack internship."></textarea>
+          </label>
+
+          <p class="form-section">Tech stack — grouped (comma-separated). “Languages” is pre-filled from your repos; edit freely.</p>
+          <div class="form-grid">
+            <label>Languages <input id="resLang" type="text" placeholder="JavaScript, Python, C++" /></label>
+            <label>Frontend <input id="resFrontend" type="text" placeholder="React, HTML, CSS, Tailwind" /></label>
+            <label>Backend <input id="resBackend" type="text" placeholder="Node.js, Express" /></label>
+            <label>Tools <input id="resTools" type="text" placeholder="Git, GitHub, VS Code, Postman" /></label>
+            <label>Databases <input id="resDb" type="text" placeholder="MongoDB, MySQL" /></label>
+          </div>
+
+          <label class="block">Project notes (optional, one per line) — adds “why” + feature bullets to a pinned repo.<br>
+            <span class="hint">Format: <code>repo-name | why you built it | feature one; feature two; feature three</code></span>
+            <textarea id="resProjects" rows="4" placeholder="dev-portfolio | Turns any GitHub username into a shareable portfolio | Parallel fetch with Promise.all; CSS heatmap; PDF export"></textarea>
+          </label>
+
+          <div class="export-actions">
+            <button id="resSave" class="btn btn-primary">Save details</button>
+            <button id="resClose" class="btn btn-ghost">Close</button>
+          </div>
         </div>
       </section>
     </div>
@@ -186,6 +226,9 @@
         <div class="skl skl-heatmap"></div>
       </section>
     </div>
+
+    <!-- Print-only résumé document (hidden on screen, rendered by JS) -->
+    <div id="resumeDoc" class="resume-doc" aria-hidden="true"></div>
   </main>
 
   <footer class="footer no-print">

@@ -49,6 +49,12 @@
    ============================================================ */
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
+
+/* The `hidden` attribute must always win, even over component display rules
+   like `.hero-card { display: flex }` (author CSS otherwise overrides the
+   browser's default `[hidden] { display: none }`). */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -275,6 +281,24 @@ h1, h2 { margin: 0; }
    ============================================================ */
 .export-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 
+/* Resume details editor */
+.resume-panel { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 18px; }
+.resume-panel .form-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;
+}
+.resume-panel label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-dim); }
+.resume-panel label.block { margin-bottom: 12px; }
+.resume-panel input, .resume-panel textarea {
+  padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font: inherit; font-size: 14px; width: 100%;
+}
+.resume-panel textarea { resize: vertical; }
+.resume-panel .form-section { font-size: 13px; font-weight: 600; margin: 6px 0 8px; color: var(--text); }
+.resume-panel code { background: var(--bg-sunken); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+/* Résumé document — hidden on screen, only rendered when printing */
+.resume-doc { display: none; }
+
 /* ============================================================
    ERROR PANEL
    ============================================================ */
@@ -328,25 +352,85 @@ h1, h2 { margin: 0; }
   .streaks { grid-template-columns: repeat(2, 1fr); }
   .skills-grid { grid-template-columns: 1fr; }
   .repos-grid { grid-template-columns: 1fr; }
+  .resume-panel .form-grid { grid-template-columns: 1fr; }
   .hero-card { flex-direction: column; align-items: center; text-align: center; }
   .profile-facts { justify-content: center; }
   .avatar { width: 96px; height: 96px; }
 }
 
 /* ============================================================
-   PRINT  (PDF export — clean, light, portfolio-only layout)
+   PRINT  (PDF export — recruiter-ready one-page résumé)
+   On screen the interactive dashboard shows; when printing we hide it
+   entirely and render the dedicated #resumeDoc summary instead.
    ============================================================ */
 @media print {
+  @page { size: A4 portrait; margin: 11mm; }
+
   :root, [data-theme="dark"] {
-    --bg: #ffffff; --bg-elev: #ffffff; --bg-sunken: #f0f0f0;
-    --text: #000; --text-dim: #444; --border: #ccc; --shadow: none;
+    --bg: #ffffff; --bg-elev: #ffffff; --bg-sunken: #f3f4f6;
+    --text: #111; --text-dim: #555; --border: #cbd0d6; --shadow: none;
+    --accent: #0969da;
   }
-  .no-print { display: none !important; }
-  .topbar, .token-panel, .footer, #errorPanel, .search,
-  #exportSection, .repo-pin, .heat-tooltip { display: none !important; }
-  body { background: #fff; }
-  .container { max-width: 100%; padding: 0; }
-  .panel, .stat-card, .hero-card { break-inside: avoid; box-shadow: none; }
-  a { color: #000; }
-  .heatmap-wrap { overflow: visible; }
+
+  /* Hide the whole app UI; show only the résumé. */
+  body > *:not(main) { display: none !important; }
+  .topbar, .token-panel, .footer, #errorPanel,
+  #hero, #portfolio, #portfolioSkeleton, .no-print { display: none !important; }
+
+  html, body { background: #fff; font-size: 10.5px; color: #111; }
+  .container { max-width: 100%; padding: 0; margin: 0; }
+
+  .resume-doc { display: block; }
+
+  /* ---- résumé header ---- */
+  .r-header { border-bottom: 2px solid var(--accent); padding-bottom: 8px; margin-bottom: 10px; }
+  .r-name { font-size: 22px; font-weight: 800; line-height: 1.1; }
+  .r-title { font-size: 13px; font-weight: 600; color: var(--accent); margin-top: 2px; }
+  .r-contact { font-size: 10px; color: #333; margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .r-contact a { color: #111; text-decoration: none; }
+
+  /* ---- generic section ---- */
+  .r-section { margin-bottom: 10px; break-inside: avoid; }
+  .r-section h3 {
+    font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
+    color: #111; border-bottom: 1px solid var(--border); padding-bottom: 3px; margin: 0 0 6px;
+  }
+  .r-summary { font-size: 10.5px; line-height: 1.45; }
+
+  /* ---- skills (grouped) ---- */
+  .r-skills { display: grid; grid-template-columns: max-content 1fr; gap: 3px 10px; font-size: 10px; }
+  .r-skills dt { font-weight: 700; }
+  .r-skills dd { margin: 0; }
+
+  /* ---- stats snapshot ---- */
+  .r-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; }
+  .r-stat { border: 1px solid var(--border); border-radius: 6px; padding: 6px 4px; text-align: center; }
+  .r-stat b { display: block; font-size: 15px; }
+  .r-stat span { font-size: 8px; color: #555; text-transform: uppercase; letter-spacing: .03em; }
+
+  /* language bars inside the snapshot */
+  .r-langs { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 16px; }
+  .r-lang { font-size: 9px; }
+  .r-lang-head { display: flex; justify-content: space-between; }
+  .r-bar { height: 5px; background: var(--bg-sunken); border-radius: 99px; overflow: hidden; margin-top: 1px; }
+  .r-bar > i { display: block; height: 100%; border-radius: 99px; }
+
+  /* mini heatmap */
+  .r-heatmap { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 7px);
+    grid-auto-columns: 7px; gap: 1.5px; margin-top: 6px; }
+  .r-heat-cell { width: 7px; height: 7px; border-radius: 1px; }
+
+  /* ---- projects ---- */
+  .r-project { break-inside: avoid; margin-bottom: 8px; }
+  .r-proj-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .r-proj-name { font-size: 11px; font-weight: 700; }
+  .r-proj-links { font-size: 9px; }
+  .r-proj-links a { color: var(--accent); text-decoration: none; }
+  .r-proj-meta { font-size: 9px; color: #555; margin: 1px 0 2px; }
+  .r-proj-desc { font-size: 9.5px; }
+  .r-proj-why { font-size: 9.5px; font-style: italic; color: #333; }
+  .r-proj-bullets { margin: 2px 0 0 14px; padding: 0; font-size: 9.5px; }
+  .r-proj-bullets li { margin-bottom: 1px; }
+  .r-tech { font-size: 9px; color: #333; }
+  .r-tech b { color: #111; }
 }
