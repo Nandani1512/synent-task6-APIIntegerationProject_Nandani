@@ -4,8 +4,11 @@ Enter any GitHub username and instantly generate a beautiful, shareable develope
 portfolio — and export it as a recruiter-ready **one-page résumé PDF**. Built with
 **vanilla HTML, CSS, and JavaScript** (Fetch API), no frameworks.
 
-<!-- Replace this with your live URL after deploying (see Deployment below) -->
-**🔗 Live demo:** `https://<your-username>.github.io/<repo-name>/`
+<!-- Live site, deployed on GitHub Pages -->
+**🔗 Live demo:** https://nandani1512.github.io/synent-task6-APIIntegerationProject_Nandani/
+
+Try it with a username in the URL:
+[?user=torvalds](https://nandani1512.github.io/synent-task6-APIIntegerationProject_Nandani/?user=torvalds)
 
 ---
 
@@ -119,7 +122,8 @@ This is a static site — no build step.
 1. Push the repo to GitHub.
 2. Repo → **Settings → Pages**.
 3. **Source:** Deploy from a branch → **Branch:** `main` → **Folder:** `/ (root)` → **Save**.
-4. After ~1 minute your site is live at `https://<your-username>.github.io/<repo-name>/`.
+4. After ~1 minute your site is live at `https://<your-username>.github.io/<repo-name>/`
+   — for this project: https://nandani1512.github.io/synent-task6-APIIntegerationProject_Nandani/
 
 HTTPS is automatic (required for the clipboard "copy link" feature). `config.local.js`
 is gitignored, so your token is **not** deployed — the public site safely runs at
