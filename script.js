@@ -8,7 +8,7 @@
 /* ---------- constants ---------- */
 const API = "https://api.github.com";
 const TOKEN_KEY = "ghpf_token";
-const LANG_FETCH_LIMIT = 8;      // cap per-repo language calls to protect the 60/hr rate limit
+const LANG_FETCH_LIMIT = 3;      // cap per-repo language calls to protect the 60/hr rate limit
 const TOP_LANGS = 8;             // skill bars to show
 const HEAT_WEEKS = 53;           // columns in the contribution heatmap
 const PIN_KEY = (u) => `ghpf_pins_${u.toLowerCase()}`;
