@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Enter any GitHub username and instantly generate a beautiful developer portfolio with stats, skills, contribution heatmap, and a recruiter-ready résumé PDF." />
+  <meta property="og:title" content="GitHub Dev Portfolio Generator" />
+  <meta property="og:description" content="Turn any GitHub profile into a shareable developer portfolio with stats, skills, heatmap, and PDF résumé export." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://nandani1512.github.io/synent-task6-APIIntegerationProject_Nandani/" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="GitHub Dev Portfolio Generator" />
+  <meta name="twitter:description" content="Turn any GitHub profile into a shareable developer portfolio with stats, skills, heatmap, and PDF résumé export." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧑‍💻</text></svg>" />
+  <title>GitHub Dev Portfolio Generator</title>
+  <link rel="preconnect" href="https://api.github.com" />
+  <link rel="stylesheet" href="style.css" />
+  <!-- CodeMirror 5 (LaTeX / STeX mode) for the BYOT template editor -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/material-darker.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/stex/stex.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/addon/edit/matchbrackets.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+  <!-- Optional, gitignored: seeds your personal token into sessionStorage. Absent for cloners (harmless). -->
+  <script src="config.local.js" defer onerror="this.remove()"></script>
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <!-- animated aurora background -->
+  <div class="app-aurora" aria-hidden="true"><span class="a1"></span><span class="a2"></span><span class="a3"></span></div>
+
+  <!-- ====================== TOP BAR ====================== -->
+  <header class="topbar no-print">
+    <div class="topbar-inner">
+      <a class="brand" href="index.html" title="Back to home" aria-label="Back to home">
+        <svg class="brand-icon" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                   0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
+                   -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66
+                   .07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15
+                   -.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0
+                   1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82
+                   1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01
+                   1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+        </svg>
+        <span>Dev Portfolio Generator</span>
+      </a>
+      <div class="topbar-actions">
+        <span id="rateLimit" class="rate-limit" title="GitHub API requests remaining this hour"></span>
+        <button id="tokenBtn" class="icon-btn" title="Set personal access token"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></button>
+        <button id="themeToggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">🌙</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Token entry popover -->
+  <div id="tokenPanel" class="token-panel no-print" hidden>
+    <p class="token-help">
+      Optional GitHub <strong>personal access token</strong> raises your rate limit
+      from 60 to 5000 requests/hour. Stored only in this browser session.
+    </p>
+    <div class="token-row">
+      <input id="tokenInput" type="password" placeholder="ghp_…" autocomplete="off" spellcheck="false" />
+      <button id="tokenSave" class="btn btn-primary">Save</button>
+      <button id="tokenClear" class="btn btn-ghost">Clear</button>
+    </div>
+  </div>
+
+  <main class="container">
+    <!-- ====================== HERO ====================== -->
+    <section class="hero" id="hero">
+      <form class="search no-print" id="searchForm" autocomplete="off">
+        <input id="usernameInput" type="text" placeholder="Enter a GitHub username…"
+               aria-label="GitHub username" spellcheck="false" />
+        <button type="submit" id="generateBtn" class="btn btn-primary">Generate</button>
+      </form>
+
+      <!-- Hero profile (filled after fetch) -->
+      <div class="hero-card" id="heroCard" hidden>
+        <img id="avatar" class="avatar" alt="Avatar" />
+        <div class="hero-meta">
+          <h1 id="profileName" class="profile-name"></h1>
+          <a id="profileLogin" class="profile-login" target="_blank" rel="noopener noreferrer"></a>
+          <p id="profileBio" class="profile-bio"></p>
+          <ul class="profile-facts">
+            <li id="factLocation" hidden><span class="facon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span><span></span></li>
+            <li id="factJoined" hidden><span class="facon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span><span></span></li>
+            <li id="factLink" hidden><span class="facon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></span>
+              <a target="_blank" rel="noopener noreferrer">View on GitHub</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Hero skeleton -->
+      <div class="hero-card skeleton-block" id="heroSkeleton" hidden>
+        <div class="skl skl-avatar"></div>
+        <div class="hero-meta">
+          <div class="skl skl-line w40"></div>
+          <div class="skl skl-line w25"></div>
+          <div class="skl skl-line w70"></div>
+          <div class="skl skl-line w50"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Global error panel -->
+    <section id="errorPanel" class="error-panel" hidden>
+      <div class="error-icon" id="errorIcon">⚠️</div>
+      <h2 id="errorTitle">Something went wrong</h2>
+      <p id="errorMessage"></p>
+      <button id="retryBtn" class="btn btn-primary">Retry</button>
+    </section>
+
+    <!-- Everything below is only visible once a profile loads -->
+    <div id="portfolio" hidden>
+      <!-- ====================== STATS BAR ====================== -->
+      <section class="stats" id="statsSection" aria-label="Statistics">
+        <div class="stat-card"><div class="stat-num" data-stat="repos">0</div><div class="stat-label">Repositories</div></div>
+        <div class="stat-card"><div class="stat-num" data-stat="stars">0</div><div class="stat-label">Stars Earned</div></div>
+        <div class="stat-card"><div class="stat-num" data-stat="followers">0</div><div class="stat-label">Followers</div></div>
+        <div class="stat-card"><div class="stat-num" data-stat="following">0</div><div class="stat-label">Following</div></div>
+      </section>
+
+      <!-- ====================== SKILLS ====================== -->
+      <section class="panel" id="skillsSection">
+        <h2 class="panel-title">Skills &amp; Languages</h2>
+        <div id="skillsBody" class="skills-grid"></div>
+      </section>
+
+      <!-- ====================== PINNED REPOS ====================== -->
+      <section class="panel" id="reposSection">
+        <h2 class="panel-title">Repositories <span class="hint no-print">(click the pin to feature a repo)</span></h2>
+        <div id="reposBody" class="repos-grid"></div>
+      </section>
+
+      <!-- ====================== HEATMAP ====================== -->
+      <section class="panel" id="heatmapSection">
+        <h2 class="panel-title">Contribution Activity <span class="hint">(last 12 months of public push events)</span></h2>
+        <div class="heatmap-wrap">
+          <div id="heatmap" class="heatmap" role="img" aria-label="Contribution heatmap"></div>
+          <div class="heatmap-legend">
+            <span>Less</span>
+            <span class="lvl lvl-0"></span><span class="lvl lvl-1"></span>
+            <span class="lvl lvl-2"></span><span class="lvl lvl-3"></span><span class="lvl lvl-4"></span>
+            <span>More</span>
+          </div>
+        </div>
+        <div id="heatTooltip" class="heat-tooltip" hidden></div>
+      </section>
+
+      <!-- ====================== STREAKS ====================== -->
+      <section class="stats streaks" id="streaksSection" aria-label="Streaks">
+        <div class="stat-card"><div class="stat-num" data-stat="current">0</div><div class="stat-label">Current Streak (days)</div></div>
+        <div class="stat-card"><div class="stat-num" data-stat="longest">0</div><div class="stat-label">Longest Streak (days)</div></div>
+      </section>
+
+      <!-- ====================== COMMIT CHART ====================== -->
+      <section class="panel" id="chartSection">
+        <h2 class="panel-title">Commit Activity <span class="hint">(pushes per day, last 30 days)</span></h2>
+        <div class="chart-wrap"><canvas id="commitChart" height="120"></canvas></div>
+      </section>
+
+      <!-- ====================== ACTIVITY FEED ====================== -->
+      <section class="panel" id="feedSection">
+        <h2 class="panel-title">Recent Activity</h2>
+        <ul id="feedBody" class="feed"></ul>
+      </section>
+
+      <!-- ====================== EXPORT ====================== -->
+      <section class="panel export no-print" id="exportSection">
+        <h2 class="panel-title">Share &amp; Export</h2>
+        <div class="export-actions">
+          <button id="shareBtn" class="btn btn-primary">Copy Shareable Link</button>
+          <button id="resumeBtn" class="btn btn-ghost">Resume Details</button>
+        </div>
+
+        <!-- Resume details editor (human-written parts the API can't provide) -->
+        <div id="resumePanel" class="resume-panel" hidden>
+          <p class="token-help">
+            Fill in the parts GitHub can't auto-detect. Saved to this browser so you only do it once.
+            The PDF combines this with your live GitHub stats, language bars, streaks, heatmap, and pinned repos.
+          </p>
+
+          <div class="form-grid">
+            <label>Title <input id="resTitle" type="text" placeholder="Full Stack Developer" /></label>
+            <label>Email <input id="resEmail" type="text" placeholder="you@example.com" /></label>
+            <label>Location <input id="resLocation" type="text" placeholder="City, Country" /></label>
+            <label>LinkedIn URL <input id="resLinkedin" type="text" placeholder="https://linkedin.com/in/…" /></label>
+            <label>Portfolio / Website <input id="resPortfolio" type="text" placeholder="https://…" /></label>
+          </div>
+
+          <label class="block">Developer summary (3–4 lines)
+            <textarea id="resSummary" rows="3" placeholder="Final-year CS student who builds full-stack web apps. 2+ years with JavaScript and Python. Looking for a frontend/full-stack internship."></textarea>
+          </label>
+
+          <p class="form-section">Tech stack — grouped (comma-separated). “Languages” is pre-filled from your repos; edit freely.</p>
+          <div class="form-grid">
+            <label>Languages <input id="resLang" type="text" placeholder="JavaScript, Python, C++" /></label>
+            <label>Frontend <input id="resFrontend" type="text" placeholder="React, HTML, CSS, Tailwind" /></label>
+            <label>Backend <input id="resBackend" type="text" placeholder="Node.js, Express" /></label>
+            <label>Tools <input id="resTools" type="text" placeholder="Git, GitHub, VS Code, Postman" /></label>
+            <label>Databases <input id="resDb" type="text" placeholder="MongoDB, MySQL" /></label>
+          </div>
+
+          <label class="block">Project notes (optional, one per line) — adds “why” + feature bullets to a pinned repo.<br>
+            <span class="hint">Format: <code>repo-name | why you built it | feature one; feature two; feature three</code></span>
+            <textarea id="resProjects" rows="4" placeholder="dev-portfolio | Turns any GitHub username into a shareable portfolio | Parallel fetch with Promise.all; CSS heatmap; PDF export"></textarea>
+          </label>
+
+          <div class="export-actions">
+            <button id="resSave" class="btn btn-primary">Save details</button>
+            <button id="resClose" class="btn btn-ghost">Close</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================== SHAREABLE CARD ====================== -->
+      <section class="panel no-print" id="shareCardSection">
+        <h2 class="panel-title">Shareable Card <span class="hint">(download or share your GitHub year-in-review card, like a LeetCode recap)</span></h2>
+        <div class="share-card">
+          <div class="share-card-themes" role="radiogroup" aria-label="Card theme">
+            <button class="sc-theme-pill active" data-cardtheme="midnight" aria-checked="true">Midnight</button>
+            <button class="sc-theme-pill" data-cardtheme="ocean" aria-checked="false">Ocean</button>
+            <button class="sc-theme-pill" data-cardtheme="light" aria-checked="false">Light</button>
+          </div>
+          <div class="share-card-canvas-wrap">
+            <canvas id="shareCardCanvas" width="1200" height="630" role="img" aria-label="GitHub stats card"></canvas>
+          </div>
+          <div class="export-actions">
+            <button id="scDownload" class="btn btn-primary">Download PNG</button>
+            <button id="scCopy" class="btn btn-ghost">Copy Image</button>
+            <button id="scShareTwitter" class="btn btn-ghost">Share on X</button>
+            <button id="scShareLinkedin" class="btn btn-ghost">Share on LinkedIn</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============== TAILOR YOUR RÉSUMÉ  (JD + your template -> surgical injection) ============== -->
+      <section class="panel no-print" id="byotSection">
+        <h2 class="panel-title title-gradient">Tailor Your Résumé <span class="ai-badge"><span class="ai-badge-dot"></span>AI</span> <span class="hint">(paste a JD + your LaTeX template — AI injects tailored projects between your markers)</span></h2>
+
+        <!-- Step 1 — Job Description -->
+        <p class="form-section step-label"><span class="step-num">1</span> Paste Job Description <span class="req">*</span></p>
+        <textarea id="byotJD" rows="6" required class="byot-jd"
+          placeholder="Paste the full job description here. The AI ranks your GitHub repos against it and writes ATS-optimized X-Y-Z bullets (Accomplished X, measured by Y, by doing Z) grounded only in your real repo data."></textarea>
+
+        <!-- Step 2 — Template (upload OR paste) -->
+        <p class="form-section step-label">
+          <span class="step-num">2</span> Your LaTeX Template <span class="req">*</span>
+          <button type="button" id="byotStarterLink" class="byot-starter-link">Insert starter template</button>
+        </p>
+
+        <div class="tab-toggle" role="tablist" aria-label="Template input method">
+          <button type="button" class="tab-btn active" id="byotTabUpload" role="tab"
+            aria-selected="true" aria-controls="byotPanelUpload">Upload .tex File</button>
+          <button type="button" class="tab-btn" id="byotTabPaste" role="tab"
+            aria-selected="false" aria-controls="byotPanelPaste">Paste LaTeX Code</button>
+        </div>
+
+        <!-- Tab: Upload -->
+        <div class="tab-panel" id="byotPanelUpload" role="tabpanel" aria-labelledby="byotTabUpload">
+          <div id="byotDropzone" class="byot-dropzone" tabindex="0">
+            <div class="byot-drop-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+            <p>Drop your <code>.tex</code> or <code>.txt</code> file here, or <strong>click to browse</strong></p>
+            <p class="hint">Template must include the <code>% --- AI_PROJECTS_START --- %</code> … <code>% --- AI_PROJECTS_END --- %</code> marker pair — that's the <em>only</em> region the AI edits.</p>
+            <input type="file" id="byotFileInput" accept=".tex,.txt" hidden />
+          </div>
+        </div>
+
+        <!-- Tab: Paste / live editor (also displays the loaded + injected code) -->
+        <div class="tab-panel" id="byotPanelPaste" role="tabpanel" aria-labelledby="byotTabPaste" hidden>
+          <div class="byot-editor-window">
+            <div class="byot-editor-chrome">
+              <i class="r"></i><i class="y"></i><i class="g"></i>
+              <span class="fname">resume.tex</span>
+            </div>
+            <div id="byotEditor" class="byot-editor"></div>
+          </div>
+        </div>
+
+        <div id="byotMarkerWarn" class="ai-error" hidden>
+          ⚠️ This template is missing the required <code>% --- AI_PROJECTS_START --- %</code> … <code>% --- AI_PROJECTS_END --- %</code> marker pair. The AI won't know where to inject projects. Add both markers, or click <strong>Insert starter template</strong>.
+        </div>
+
+        <!-- Step 3 — Generate -->
+        <p class="form-section step-label"><span class="step-num">3</span> Generate</p>
+        <div class="export-actions">
+          <button type="button" id="byotGenerateBtn" class="btn btn-primary">Generate Tailored Resume</button>
+        </div>
+
+        <!-- loading -->
+        <div id="byotLoading" class="ai-loading" hidden>
+          <div class="ai-spinner" aria-hidden="true"></div>
+          <p class="ai-loading-text" id="byotLoadingText"></p>
+        </div>
+
+        <!-- error -->
+        <div id="byotError" class="ai-error" hidden></div>
+
+        <!-- Step 4 — Output (revealed on success) -->
+        <div id="byotResult" class="byot-result-bar" hidden>
+          <span class="byot-result-label">Done — the editor above shows your tailored <code>.tex</code> (only the projects region changed)</span>
+          <span class="byot-result-actions">
+            <button id="byotCopyBtn" class="btn btn-ghost btn-sm">Copy Code</button>
+            <button id="byotDownloadBtn" class="btn btn-ghost btn-sm">Download .tex</button>
+            <a id="byotOverleaf" class="btn btn-primary btn-sm" href="https://overleaf.com/project"
+               target="_blank" rel="noopener noreferrer">Open Overleaf →</a>
+          </span>
+        </div>
+
+        <!-- split-screen details (below the editor on success) -->
+        <div id="byotDetails" class="ai-split byot-split" hidden>
+          <div class="ai-code">
+            <div class="ai-code-bar">
+              <span class="ai-code-title">ATS Changes Made</span>
+            </div>
+            <div class="ai-code-body">
+              <p class="hint byot-skills-note">Skill suggestions only — your Skills section is never edited.</p>
+              <h4 class="byot-detail-title">Skills to add</h4>
+              <div id="byotSkillsAdd" class="ai-chips"></div>
+              <h4 class="byot-detail-title">Skills to remove</h4>
+              <div id="byotSkillsRemove" class="ai-chips"></div>
+              <h4 class="byot-detail-title">Warnings</h4>
+              <ul id="byotWarnings" class="byot-warnings"></ul>
+            </div>
+          </div>
+          <aside class="ai-meta">
+            <h3 class="ai-meta-title">Projects in your tailored résumé</h3>
+            <ol id="byotProjects" class="ai-projects"></ol>
+            <details class="ai-considered">
+              <summary>Repos considered (top-ranked)</summary>
+              <ul id="byotConsidered" class="ai-considered-list"></ul>
+            </details>
+          </aside>
+        </div>
+      </section>
+    </div>
+
+    <!-- Full-portfolio skeleton (shown during fetch) -->
+    <div id="portfolioSkeleton" hidden>
+      <section class="stats">
+        <div class="stat-card"><div class="skl skl-line w50"></div><div class="skl skl-line w70"></div></div>
+        <div class="stat-card"><div class="skl skl-line w50"></div><div class="skl skl-line w70"></div></div>
+        <div class="stat-card"><div class="skl skl-line w50"></div><div class="skl skl-line w70"></div></div>
+        <div class="stat-card"><div class="skl skl-line w50"></div><div class="skl skl-line w70"></div></div>
+      </section>
+      <section class="panel">
+        <div class="skl skl-line w30"></div>
+        <div class="skills-grid">
+          <div class="skl skl-line"></div><div class="skl skl-line"></div>
+          <div class="skl skl-line"></div><div class="skl skl-line"></div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="skl skl-line w30"></div>
+        <div class="repos-grid">
+          <div class="skl skl-card"></div><div class="skl skl-card"></div>
+          <div class="skl skl-card"></div><div class="skl skl-card"></div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="skl skl-line w30"></div>
+        <div class="skl skl-heatmap"></div>
+      </section>
+    </div>
+
+    <!-- Print-only résumé document (hidden on screen, rendered by JS) -->
+    <div id="resumeDoc" class="resume-doc" aria-hidden="true"></div>
+  </main>
+
+  <footer class="footer no-print">
+    <div class="footer-bottom">
+      <span style="display:inline-flex;align-items:center;gap:8px">
+        <svg class="brand-icon" viewBox="0 0 16 16" aria-hidden="true" style="width:16px;height:16px;fill:var(--text-dim)">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                   0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
+                   -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66
+                   .07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15
+                   -.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0
+                   1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82
+                   1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01
+                   1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+        </svg>
+        © 2025 DevFolio · Built by Nandani
+      </span>
+      ·
+      <a href="index.html" style="color:var(--text-dim)">Home</a>
+      ·
+      <a href="https://github.com/nandani1512" target="_blank" rel="noopener noreferrer" style="color:var(--text-dim)">GitHub</a>
+    </div>
+  </footer>
+
+  <!-- toast -->
+  <div id="toast" class="toast" hidden></div>
+</body>
+</html>

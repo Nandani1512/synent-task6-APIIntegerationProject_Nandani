@@ -16,3 +16,9 @@
 // =====================================================================
 
 sessionStorage.setItem("ghpf_token", "PASTE_YOUR_TOKEN_HERE");
+
+// ---------------------------------------------------------------------
+//  AI Resume Tailor backend (JD -> LaTeX). Defaults to http://localhost:3000.
+//  Uncomment + set this to point the frontend at a deployed backend:
+// ---------------------------------------------------------------------
+// window.BACKEND_URL = "https://your-backend.onrender.com";

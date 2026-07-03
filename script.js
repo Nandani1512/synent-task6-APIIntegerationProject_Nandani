@@ -7,6 +7,9 @@
 
 /* ---------- constants ---------- */
 const API = "https://api.github.com";
+// Base URL of the JD->LaTeX backend. Override in config.local.js with
+// `window.BACKEND_URL = "https://your-backend…"` to point at a deployed server.
+const BACKEND_URL = (typeof window !== "undefined" && window.BACKEND_URL) || "http://localhost:3000";
 const TOKEN_KEY = "ghpf_token";
 const LANG_FETCH_LIMIT = 3;      // cap per-repo language calls to protect the 60/hr rate limit
 const TOP_LANGS = 8;             // skill bars to show
@@ -37,12 +40,7 @@ function el(tag, props = {}, children = []) {
   return node;
 }
 
-/** Escape any user-derived string before it is ever interpolated into markup. */
-function escapeHtml(str) {
-  return String(str ?? "").replace(/[&<>"']/g, (c) => (
-    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
-  ));
-}
+
 
 /* ---------- app state ---------- */
 const state = {
@@ -60,7 +58,7 @@ const state = {
    THEME (CSS-variable based dark / light toggle)
    ============================================================ */
 (function initTheme() {
-  const saved = sessionStorage.getItem("ghpf_theme");
+  const saved = localStorage.getItem("ghpf_theme");
   if (saved) document.documentElement.dataset.theme = saved;
   syncThemeIcon();
 })();
@@ -71,10 +69,12 @@ function syncThemeIcon() {
 $("#themeToggle").addEventListener("click", () => {
   const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
   document.documentElement.dataset.theme = next;
-  sessionStorage.setItem("ghpf_theme", next);
+  localStorage.setItem("ghpf_theme", next);
   syncThemeIcon();
   // redraw the chart so its colours follow the new theme
   if (state.events.length) renderCommitChart(state.events);
+  // the share card uses its own theme presets, but redraw so the avatar/data stay fresh
+  if (state.user) renderShareCard();
 });
 
 /* ============================================================
@@ -169,6 +169,10 @@ async function generate(username) {
   $("#usernameInput").value = username;
   setShareParam(username);
 
+  // Reset the résumé-tailor form for a fresh user search.
+  // The CodeMirror editor (uploaded template) is LEFT INTACT per spec.
+  resetByotState();
+
   hideError();
   showSkeleton(true);
 
@@ -212,9 +216,14 @@ async function generate(username) {
         languages[lang] = (languages[lang] || 0) + bytes;
       }
     });
-    // fall back to the primary `language` field for repos beyond the cap
+    // fall back to the primary `language` field for repos beyond the cap,
+    // weighted by repo size (KB→bytes) so their % is comparable to the
+    // byte-counted top repos — otherwise a +1 tally rounds to 0.0%.
     for (const r of repos.slice(LANG_FETCH_LIMIT)) {
-      if (r.language) languages[r.language] = (languages[r.language] || 0) + 1;
+      if (r.language) {
+        const weight = (r.size || 0) * 1024 || 2048;   // small floor for empty repos
+        languages[r.language] = (languages[r.language] || 0) + weight;
+      }
     }
 
     const data = { user, repos, languages, repoLangs, events };
@@ -237,6 +246,7 @@ function applyData(data, username) {
   state.pins = loadPins(username);
 
   $("#portfolio").hidden = false;
+  revealOnScroll();                 // tag panels/stat-cards for fade-in-up
   renderHero(data.user);
   renderStats(data.user, data.repos);
   renderSkills(data.languages);
@@ -245,6 +255,7 @@ function applyData(data, username) {
   renderStreaks(state.events);
   renderCommitChart(state.events);
   renderFeed(state.events);
+  renderShareCard();              // draw the shareable stats card
 
   loadResumeIntoForm(username);   // prefill the editor (API data + any saved details)
   renderResume();                 // build the print-only résumé
@@ -305,10 +316,15 @@ function renderStats(user, repos) {
   animateCounter($('[data-stat="following"]'), user.following ?? 0);
 }
 
-/** Count up from 0 to target with an easeOutCubic curve. */
-function animateCounter(node, target) {
+/**
+ * Count up from 0 to `target` with an easeOutCubic curve.
+ * @param {HTMLElement} node     element whose textContent is updated
+ * @param {number}      target   final number to reach
+ * @param {number}      duration animation length in ms (default 1500)
+ */
+function animateCounter(node, target, duration = 1500) {
+  if (!node) return;
   target = Number(target) || 0;
-  const duration = 900;
   const start = performance.now();
   function tick(now) {
     const p = Math.min(1, (now - start) / duration);
@@ -318,6 +334,8 @@ function animateCounter(node, target) {
   }
   requestAnimationFrame(tick);
 }
+/* Alias — the requested reusable count-up utility. */
+const countUp = animateCounter;
 
 /* ============================================================
    RENDER: SKILLS  (top languages with % bars)
@@ -399,7 +417,7 @@ function repoCard(r) {
     class: `repo-pin ${isPinned ? "active" : ""}`,
     title: isPinned ? "Unpin" : "Pin",
     "aria-label": isPinned ? "Unpin repository" : "Pin repository",
-    text: isPinned ? "📌" : "📍",
+    text: isPinned ? "✓" : "⊕",
     onclick: () => togglePin(r.id),
   });
 
@@ -716,9 +734,6 @@ function flashButton(btn, msg) {
   setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1600);
 }
 
-// PDF export uses the browser's print dialog + the @media print stylesheet.
-$("#pdfBtn").addEventListener("click", () => { renderResume(); window.print(); });
-
 /* ============================================================
    RÉSUMÉ  (print-only one-page developer summary)
    Combines human-written details (localStorage) with live GitHub data.
@@ -817,13 +832,13 @@ function renderResume() {
   const name = u.name || u.login;
   const contact = el("div", { class: "r-contact" });
   const loc = val("location", u.location || "");
-  if (loc) contact.appendChild(el("span", { text: `📍 ${loc}` }));
-  if (val("email", u.email)) contact.appendChild(el("a", { href: `mailto:${val("email", u.email)}`, text: `✉ ${val("email", u.email)}` }));
+  if (loc) contact.appendChild(el("span", { text: loc }));
+  if (val("email", u.email)) contact.appendChild(el("a", { href: `mailto:${val("email", u.email)}`, text: val("email", u.email) }));
   contact.appendChild(el("a", { href: u.html_url, text: `⌥ github.com/${u.login}` }));
   if (val("linkedin")) contact.appendChild(el("a", { href: val("linkedin"), text: "in/ LinkedIn" }));
   if (val("portfolio")) {
     let url = val("portfolio"); if (!/^https?:\/\//.test(url)) url = "https://" + url;
-    contact.appendChild(el("a", { href: url, text: `🔗 ${val("portfolio").replace(/^https?:\/\//, "")}` }));
+    contact.appendChild(el("a", { href: url, text: val("portfolio").replace(/^https?:\/\//, "") }));
   }
 
   const header = el("div", { class: "r-header" }, [
@@ -884,7 +899,7 @@ function buildStatsSnapshot() {
   ]);
 
   const streakLine = el("div", { class: "r-summary", text:
-    `🔥 Current streak: ${current} day${current === 1 ? "" : "s"}  ·  🏆 Longest: ${longest} days  ·  📅 Active days (recent): ${activeDays}` });
+    `Current streak: ${current} day${current === 1 ? "" : "s"}  ·  Longest: ${longest} days  ·  Active days (recent): ${activeDays}` });
 
   // language bars (top 6)
   const langEntries = Object.entries(state.languages).sort((a, b) => b[1] - a[1]);
@@ -961,6 +976,253 @@ function buildProjectCard(r, notes) {
 }
 
 /* ============================================================
+   SHARE CARD  (LeetCode-style year-in-review stats card)
+   Renders a 1200×630 canvas from live GitHub data that the user
+   can download as a PNG, copy to clipboard, or share. Replaces the
+   old PDF export. Three self-contained colour themes (independent
+   of the app's light/dark theme).
+   ============================================================ */
+let scTheme = "midnight";
+let scAvatarImg = null;      // cached, CORS-clean avatar Image
+let scAvatarUrl = "";        // url the cached avatar was loaded from
+
+const SC_THEMES = {
+  midnight: {
+    bg: ["#0d1117", "#161b2e", "#1c1033"], glow: "rgba(163,113,247,.28)",
+    text: "#f0f6fc", sub: "#9da7b3", tile: "rgba(255,255,255,.05)", tileBorder: "rgba(255,255,255,.10)",
+    accent: "#a371f7", track: "rgba(255,255,255,.08)",
+    heat: ["#161b22", "#0e4429", "#006d32", "#26a641", "#39d353"],
+  },
+  ocean: {
+    bg: ["#04283b", "#05455e", "#066b6b"], glow: "rgba(56,189,248,.30)",
+    text: "#eafcff", sub: "#a6d5df", tile: "rgba(255,255,255,.07)", tileBorder: "rgba(255,255,255,.13)",
+    accent: "#38bdf8", track: "rgba(255,255,255,.10)",
+    heat: ["#0b3a4a", "#0e5a5f", "#0f8a7e", "#22b8a6", "#5ce6d0"],
+  },
+  light: {
+    bg: ["#ffffff", "#f2f5fb", "#e7edfb"], glow: "rgba(9,105,218,.16)",
+    text: "#0d1117", sub: "#57606a", tile: "rgba(9,105,218,.06)", tileBorder: "rgba(9,105,218,.15)",
+    accent: "#0969da", track: "rgba(9,105,218,.10)",
+    heat: ["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"],
+  },
+};
+
+const SC_FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+
+/** roundRect polyfill-safe helper. */
+function scRoundRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/** Load the avatar (once per URL) then (re)draw the card. */
+function renderShareCard() {
+  const canvas = $("#shareCardCanvas");
+  if (!canvas || !state.user) return;
+
+  const url = state.user.avatar_url;
+  if (url && url !== scAvatarUrl) {
+    scAvatarUrl = url;
+    scAvatarImg = null;
+    const img = new Image();
+    img.crossOrigin = "anonymous";                 // keep the canvas exportable
+    img.onload = () => { scAvatarImg = img; drawShareCard(); };
+    img.onerror = () => { scAvatarImg = null; drawShareCard(); };  // fall back to initials
+    img.src = url;
+  }
+  drawShareCard();
+}
+
+function drawShareCard() {
+  const canvas = $("#shareCardCanvas");
+  if (!canvas || !state.user) return;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height, P = 64;
+  const t = SC_THEMES[scTheme] || SC_THEMES.midnight;
+  const u = state.user;
+  const fmt = (n) => Number(n || 0).toLocaleString();
+
+  /* ---- background ---- */
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, t.bg[0]); g.addColorStop(0.55, t.bg[1]); g.addColorStop(1, t.bg[2]);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  const glow = ctx.createRadialGradient(W - 120, 90, 40, W - 120, 90, 520);
+  glow.addColorStop(0, t.glow); glow.addColorStop(1, "transparent");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
+
+  /* ---- header: avatar + name ---- */
+  const acx = P + 62, acy = P + 58, ar = 62;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(acx, acy, ar, 0, Math.PI * 2); ctx.closePath();
+  ctx.lineWidth = 4; ctx.strokeStyle = t.accent; ctx.stroke();
+  ctx.clip();
+  if (scAvatarImg) {
+    ctx.drawImage(scAvatarImg, acx - ar, acy - ar, ar * 2, ar * 2);
+  } else {
+    ctx.fillStyle = t.accent; ctx.fillRect(acx - ar, acy - ar, ar * 2, ar * 2);
+    const initials = (u.name || u.login || "?").split(/\s+/).map((s) => s[0]).slice(0, 2).join("").toUpperCase();
+    ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.font = `800 46px ${SC_FONT}`; ctx.fillText(initials, acx, acy + 2);
+  }
+  ctx.restore();
+
+  const subtitle = (state.username ? (loadResumeDetails(state.username).title || "") : "").trim();
+  const tx = P + 158;
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = t.text; ctx.font = `800 46px ${SC_FONT}`;
+  ctx.fillText(u.name || u.login, tx, subtitle ? 104 : 112);
+  ctx.fillStyle = t.sub; ctx.font = `500 27px ${SC_FONT}`;
+  ctx.fillText("@" + u.login, tx, subtitle ? 144 : 154);
+  if (subtitle) { ctx.fillStyle = t.accent; ctx.font = `600 22px ${SC_FONT}`; ctx.fillText(subtitle, tx, 180); }
+
+  /* ---- stat tiles ---- */
+  const totalStars = state.repos.reduce((s, r) => s + (r.stargazers_count || 0), 0);
+  const { current } = computeStreaks(state.events);
+  const tiles = [
+    [fmt(u.public_repos ?? state.repos.length), "Repositories"],
+    [fmt(totalStars), "Stars Earned"],
+    [fmt(u.followers ?? 0), "Followers"],
+    [`${fmt(current)} 🔥`, "Day Streak"],
+  ];
+  const tGap = 22, tTop = 224, tH = 116;
+  const tW = (W - 2 * P - tGap * 3) / 4;
+  tiles.forEach(([num, label], i) => {
+    const x = P + i * (tW + tGap);
+    ctx.fillStyle = t.tile; scRoundRect(ctx, x, tTop, tW, tH, 16); ctx.fill();
+    ctx.lineWidth = 1; ctx.strokeStyle = t.tileBorder; scRoundRect(ctx, x, tTop, tW, tH, 16); ctx.stroke();
+    ctx.textAlign = "center";
+    ctx.fillStyle = t.text; ctx.font = `800 42px ${SC_FONT}`;
+    ctx.fillText(String(num), x + tW / 2, tTop + 60);
+    ctx.fillStyle = t.sub; ctx.font = `600 17px ${SC_FONT}`;
+    ctx.fillText(label, x + tW / 2, tTop + 92);
+  });
+
+  /* ---- bottom-left: top languages ---- */
+  const bTop = 400;
+  ctx.textAlign = "left";
+  ctx.fillStyle = t.text; ctx.font = `700 24px ${SC_FONT}`;
+  ctx.fillText("Top Languages", P, bTop);
+
+  const langEntries = Object.entries(state.languages).sort((a, b) => b[1] - a[1]);
+  const langTotal = langEntries.reduce((s, [, b]) => s + b, 0) || 1;
+  const barX = P + 132, barW = 300, barR = P + barW + 132 + 60;
+  langEntries.slice(0, 4).forEach(([name, bytes], i) => {
+    const y = bTop + 36 + i * 34;
+    const pct = (bytes / langTotal) * 100;
+    ctx.fillStyle = t.text; ctx.font = `600 18px ${SC_FONT}`; ctx.textAlign = "left";
+    ctx.fillText(name.length > 12 ? name.slice(0, 11) + "…" : name, P, y);
+    ctx.fillStyle = t.track; scRoundRect(ctx, barX, y - 13, barW, 12, 6); ctx.fill();
+    ctx.fillStyle = langColor(name); scRoundRect(ctx, barX, y - 13, Math.max(6, barW * pct / 100), 12, 6); ctx.fill();
+    ctx.fillStyle = t.sub; ctx.font = `600 16px ${SC_FONT}`; ctx.textAlign = "right";
+    ctx.fillText(`${pct >= 10 ? pct.toFixed(0) : pct.toFixed(1)}%`, barR, y);
+  });
+  if (!langEntries.length) {
+    ctx.fillStyle = t.sub; ctx.font = `500 17px ${SC_FONT}`;
+    ctx.fillText("No language data available.", P, bTop + 40);
+  }
+
+  /* ---- bottom-right: mini contribution heatmap ---- */
+  const hx = 636, weeks = 30, cell = 13, cgap = 3, colW = cell + cgap;
+  ctx.fillStyle = t.text; ctx.font = `700 24px ${SC_FONT}`; ctx.textAlign = "left";
+  ctx.fillText("Contributions", hx, bTop);
+  const map = buildPushMap(state.events);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = new Date(today);
+  start.setDate(start.getDate() - (weeks - 1) * 7);
+  start.setDate(start.getDate() - start.getDay());
+  const hTop = bTop + 22;
+  let col = 0, row = 0;
+  for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+    const lvl = heatLevel(map.get(ymd(d)) || 0);
+    ctx.fillStyle = t.heat[lvl];
+    scRoundRect(ctx, hx + col * colW, hTop + row * colW, cell, cell, 3); ctx.fill();
+    row++;
+    if (row === 7) { row = 0; col++; }
+  }
+
+  /* ---- footer ---- */
+  ctx.fillStyle = t.sub; ctx.font = `600 19px ${SC_FONT}`; ctx.textAlign = "left";
+  ctx.fillText(`github.com/${u.login}`, P, H - 40);
+  ctx.textAlign = "right"; ctx.fillStyle = t.accent; ctx.font = `700 19px ${SC_FONT}`;
+  ctx.fillText("DevFolio", W - P, H - 40);
+}
+
+/* ---- share-card wiring ---- */
+$$(".sc-theme-pill").forEach((pill) => {
+  pill.addEventListener("click", () => {
+    scTheme = pill.dataset.cardtheme || "midnight";
+    $$(".sc-theme-pill").forEach((p) => {
+      const on = p === pill;
+      p.classList.toggle("active", on);
+      p.setAttribute("aria-checked", String(on));
+    });
+    drawShareCard();
+  });
+});
+
+/** Build the public shareable portfolio link for the current user. */
+function shareCardLink() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("user", state.username);
+  return url.toString();
+}
+
+$("#scDownload").addEventListener("click", () => {
+  const canvas = $("#shareCardCanvas");
+  if (!canvas || !state.user) { toast("Generate a portfolio first."); return; }
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = el("a", { href: url, download: `github-card-${state.user.login}.png` });
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    toast("Card downloaded");
+  }, "image/png");
+});
+
+$("#scCopy").addEventListener("click", () => {
+  const canvas = $("#shareCardCanvas");
+  if (!canvas || !state.user) { toast("Generate a portfolio first."); return; }
+  if (!navigator.clipboard || typeof window.ClipboardItem === "undefined") {
+    toast("Image copy isn't supported here — use Download PNG.");
+    return;
+  }
+  canvas.toBlob(async (blob) => {
+    if (!blob) return;
+    try {
+      await navigator.clipboard.write([new window.ClipboardItem({ "image/png": blob })]);
+      flashButton($("#scCopy"), "✓ Copied!");
+      toast("Card image copied to clipboard");
+    } catch {
+      toast("Couldn't copy image — use Download PNG instead.");
+    }
+  }, "image/png");
+});
+
+$("#scShareTwitter").addEventListener("click", () => {
+  if (!state.user) { toast("Generate a portfolio first."); return; }
+  const text = "Check out my GitHub developer card 🧑‍💻";
+  const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareCardLink())}`;
+  window.open(url, "_blank", "noopener");
+  toast("Tip: use Download PNG to attach the card image");
+});
+
+$("#scShareLinkedin").addEventListener("click", () => {
+  if (!state.user) { toast("Generate a portfolio first."); return; }
+  const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareCardLink())}`;
+  window.open(url, "_blank", "noopener");
+  toast("Tip: use Download PNG to attach the card image");
+});
+
+/* ============================================================
    TOAST
    ============================================================ */
 let toastTimer;
@@ -977,20 +1239,15 @@ function toast(msg) {
 }
 
 /* ============================================================
-   INPUT: debounced + submit + URL param on load
+   INPUT: submit + URL param on load
    ============================================================ */
 function debounce(fn, ms) {
   let h;
   return (...args) => { clearTimeout(h); h = setTimeout(() => fn(...args), ms); };
 }
 
-// Debounced auto-generate as the user types (300ms) — prevents API spam.
-const debouncedGenerate = debounce((value) => {
-  const v = value.trim();
-  if (v.length >= 2) generate(v);
-}, 300);
-
-$("#usernameInput").addEventListener("input", (e) => debouncedGenerate(e.target.value));
+// Generate only on explicit submit (Enter key or Generate button click)
+// to avoid burning API rate limit on every keystroke.
 
 $("#searchForm").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -1007,3 +1264,450 @@ window.addEventListener("DOMContentLoaded", () => {
 window.addEventListener("load", () => {
   if (state.events.length && window.Chart && !state.chart) renderCommitChart(state.events);
 });
+
+/* ============================================================
+   Shared backend-error mapper (used by the Tailor flow below).
+   ============================================================ */
+/** Map a backend failure into a friendly, user-facing message. */
+function backendErrorMessage(kind, message, status) {
+  if (kind === "config") return "The backend has no Gemini API key configured. Add GEMINI_API_KEY to backend/.env and restart the server.";
+  if (kind === "notfound") return message || "No public repositories found for this user.";
+  if (kind === "ratelimit") return message || "GitHub rate limit reached on the server. Set GITHUB_TOKEN in backend/.env.";
+  if (kind === "input") return message || "Please check the job description and try again.";
+  return message || `The backend returned an error${status ? ` (${status})` : ""}.`;
+}
+
+/* ============================================================
+   BYOT — Bring Your Own Template  (Phase 5)
+   Drop .tex template, paste JD, POST /api/resume/tailor,
+   and see the injected result live in a CodeMirror editor.
+   ============================================================ */
+let byotEditor = null;        // CodeMirror instance
+let byotLastLatex = "";       // latest injected result
+const BYOT_MARKER = "% --- AI_PROJECTS_START --- %";
+
+const BYOT_LOADING_STEPS = [
+  "Fetching GitHub repositories…",
+  "Analyzing job description…",
+  "Matching projects with ATS keywords…",
+  "Injecting tailored bullets into template…",
+];
+
+/** Lazy-init CodeMirror once its CDN finishes loading. */
+function ensureByotEditor() {
+  if (byotEditor) return byotEditor;
+  if (typeof CodeMirror === "undefined") return null;
+
+  const container = $("#byotEditor");
+  if (!container) return null;
+
+  byotEditor = CodeMirror(container, {
+    value: "",
+    mode: "stex",
+    theme: "material-darker",
+    lineNumbers: true,
+    matchBrackets: true,
+    viewportMargin: 20,
+    lineWrapping: false,
+  });
+
+  // After a paste/edit, re-check markers silently
+  byotEditor.on("change", () => {
+    if (byotEditor) $("#byotMarkerWarn").hidden = byotHasMarkers(byotEditor.getValue());
+  });
+
+  return byotEditor;
+}
+
+/** True if a template contains BOTH project markers (the required pair). */
+function byotHasMarkers(text) {
+  return String(text).includes("% --- AI_PROJECTS_START --- %") &&
+         String(text).includes("% --- AI_PROJECTS_END --- %");
+}
+
+/* ---- Step 2 tabs: "Upload .tex File"  |  "Paste LaTeX Code" ----
+   Both tabs feed the SAME CodeMirror instance (single source of truth):
+   the upload dropzone fills it, the paste tab shows it for direct editing. */
+function switchByotTab(which) {
+  const upload = which === "upload";
+  $("#byotTabUpload").classList.toggle("active", upload);
+  $("#byotTabPaste").classList.toggle("active", !upload);
+  $("#byotTabUpload").setAttribute("aria-selected", String(upload));
+  $("#byotTabPaste").setAttribute("aria-selected", String(!upload));
+  $("#byotPanelUpload").hidden = !upload;
+  $("#byotPanelPaste").hidden = upload;
+  // CodeMirror renders blank if it was created inside a hidden panel — refresh on show.
+  if (!upload) { const ed = ensureByotEditor(); if (ed) setTimeout(() => ed.refresh(), 0); }
+}
+
+/** A minimal, compilable starter template with the project markers in place. */
+const BYOT_STARTER_TEMPLATE = [
+  "\\documentclass[letterpaper,11pt]{article}",
+  "\\usepackage[margin=1in]{geometry}",
+  "\\usepackage{enumitem}",
+  "\\usepackage{hyperref}",
+  "",
+  "\\begin{document}",
+  "",
+  "% ==================== HEADER (never edited by the AI) ====================",
+  "\\begin{center}",
+  "  {\\Large \\textbf{Your Name}} \\\\",
+  "  \\small your.email@example.com $|$ +1 555 0123 $|$ linkedin.com/in/you $|$ github.com/you",
+  "\\end{center}",
+  "",
+  "% ==================== EDUCATION (never edited by the AI) ====================",
+  "\\section*{Education}",
+  "\\textbf{Your University} \\hfill Graduation Year \\\\",
+  "Your Degree \\hfill GPA: X.X / 10",
+  "",
+  "% ==================== SKILLS (never edited by the AI) ====================",
+  "\\section*{Technical Skills}",
+  "Languages, frameworks, and tools you know.",
+  "",
+  "% ==================== PROJECTS ====================",
+  "\\section*{Projects}",
+  "\\begin{itemize}[leftmargin=*]",
+  "% --- AI_PROJECTS_START --- %",
+  "  \\item Your tailored projects will be injected here, matched to the job description.",
+  "% --- AI_PROJECTS_END --- %",
+  "\\end{itemize}",
+  "",
+  "\\end{document}",
+  "",
+].join("\n");
+
+/** Reset the BYOT state when a new username is searched.
+ *  IMPORTANT: keeps the CodeMirror content (uploaded template) intact. */
+function resetByotState() {
+  const jd = $("#byotJD");
+  if (jd) jd.value = "";
+  $("#byotError").hidden = true;
+  $("#byotResult").hidden = true;
+  $("#byotDetails").hidden = true;
+  stopByotLoading();
+  byotLastLatex = "";
+}
+
+/** Stop the BYOT loader and clean up. */
+function stopByotLoadingInternal() {
+  clearInterval(window._byotTimer);
+  window._byotTimer = null;
+  $("#byotLoading").hidden = true;
+  $("#byotGenerateBtn").disabled = false;
+}
+function startByotLoading() {
+  $("#byotError").hidden = true;
+  $("#byotResult").hidden = true;
+  $("#byotDetails").hidden = true;
+  $("#byotLoading").hidden = false;
+  $("#byotGenerateBtn").disabled = true;
+
+  let i = 0;
+  const text = $("#byotLoadingText");
+  text.textContent = BYOT_LOADING_STEPS[0];
+  clearInterval(window._byotTimer);
+  window._byotTimer = setInterval(() => {
+    i = (i + 1) % BYOT_LOADING_STEPS.length;
+    text.textContent = BYOT_LOADING_STEPS[i];
+  }, 1800);
+}
+function stopByotLoading() { stopByotLoadingInternal(); }
+
+/** Show inline error in the BYOT section. */
+function showByotError(msg) {
+  const node = $("#byotError");
+  node.textContent = msg;
+  node.hidden = false;
+  stopByotLoading();
+}
+
+/* ---- drop zone wiring ---- */
+function setupByotDropzone() {
+  const zone = $("#byotDropzone");
+  const input = $("#byotFileInput");
+  if (!zone || !input) return;
+
+  // click → file picker
+  zone.addEventListener("click", () => input.click());
+
+  // drag/drop
+  zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("drag-over"); });
+  zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    zone.classList.remove("drag-over");
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (!files || !files.length) return;
+    readTemplateFile(files[0]);
+  });
+
+  // file input change
+  input.addEventListener("change", () => {
+    const files = input.files;
+    if (files && files.length) readTemplateFile(files[0]);
+    input.value = "";  // allow re-picking the same file
+  });
+}
+
+/** FileReader.readAsText, populate CodeMirror, check markers. */
+function readTemplateFile(file) {
+  if (!file) return;
+  if (!/\.(tex|txt)$/i.test(file.name)) {
+    toast("Please upload a .tex or .txt file.");
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const text = String(reader.result || "");
+    const editor = ensureByotEditor();
+    if (!editor) {
+      // CodeMirror hasn't loaded yet — retry shortly
+      setTimeout(() => readTemplateFile(file), 300);
+      return;
+    }
+    editor.setValue(text);
+    switchByotTab("paste");   // reveal the editor so the user sees the loaded template
+    editor.refresh();
+
+    // marker check (both markers required)
+    const hasMarkers = byotHasMarkers(text);
+    $("#byotMarkerWarn").hidden = hasMarkers;
+    if (!hasMarkers) toast("Template is missing the project injection markers.");
+  };
+  reader.onerror = () => toast("Could not read the file. Try again.");
+  reader.readAsText(file, "UTF-8");
+}
+
+/** Submit the BYOT form: JD + template → POST /api/resume/tailor. */
+async function generateByotTailor() {
+  const editor = ensureByotEditor();
+  if (!editor) { toast("CodeMirror hasn't loaded yet — wait a moment and try again."); return; }
+  if (!state.username) { toast("Generate a portfolio first."); return; }
+
+  const latexTemplate = editor.getValue();
+  if (!latexTemplate.trim()) { toast("Upload or paste your LaTeX template first."); return; }
+  if (!latexTemplate.includes(BYOT_MARKER)) {
+    showByotError(`Template is missing the project marker "${BYOT_MARKER}". Add it to your template and try again.`);
+    return;
+  }
+  const jobDescription = $("#byotJD").value.trim();
+  if (!jobDescription) { toast("Paste a job description first."); $("#byotJD").focus(); return; }
+
+  startByotLoading();
+  try {
+    let res;
+    try {
+      res = await fetch(`${BACKEND_URL}/api/resume/tailor`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          github_username: state.username,
+          job_description: jobDescription,
+          latex_template: latexTemplate,
+        }),
+      });
+    } catch {
+      const err = new Error(`Couldn't reach the backend at ${BACKEND_URL}. Is the server running (npm start in backend/)?`);
+      err._friendly = err.message;
+      throw err;
+    }
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw { _friendly: backendErrorMessage(data.kind, data.error, res.status) };
+
+    renderByotResult(data);
+    toast("Projects injected into template");
+  } catch (err) {
+    showByotError(err && err._friendly ? err._friendly : "Something went wrong injecting the template.");
+  } finally {
+    stopByotLoading();
+  }
+}
+
+/** Highlight lines between the project markers in CodeMirror. */
+function highlightInjectedLines(editor, newTex, oldTex) {
+  // Clear previous highlights
+  const doc = editor.getDoc();
+  for (let i = 0; i < doc.lineCount(); i++) {
+    doc.removeLineClass(i, "background", "cm-injected");
+  }
+
+  // Find the project marker lines in the NEW text and highlight them
+  const lines = newTex.split("\n");
+  let inBlock = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.includes("% --- AI_PROJECTS_START --- %")) {
+      doc.addLineClass(i, "background", "cm-injected");
+      inBlock = true;
+      continue;
+    }
+    if (line.includes("% --- AI_PROJECTS_END --- %")) {
+      doc.addLineClass(i, "background", "cm-injected");
+      inBlock = false;
+      continue;
+    }
+    if (inBlock) doc.addLineClass(i, "background", "cm-injected");
+    // Projects-only: the skills region is never modified, so it is never highlighted.
+  }
+}
+
+/** Render the BYOT result: update CodeMirror + show details + result bar. */
+function renderByotResult(data) {
+  byotLastLatex = data.latex || "";
+
+  // Update CodeMirror with the injected LaTeX (Step 4 output view)
+  const editor = ensureByotEditor();
+  if (editor) {
+    const oldVal = editor.getValue();
+    editor.setValue(byotLastLatex);
+    switchByotTab("paste");   // reveal the editor so the tailored .tex is visible
+    editor.refresh();
+    highlightInjectedLines(editor, byotLastLatex, oldVal);
+  }
+
+  // Result bar — reveal
+  $("#byotResult").hidden = false;
+
+  // Projects in the tailored résumé (kept / replaced / added)
+  const projects = $("#byotProjects");
+  projects.replaceChildren();
+  for (const p of data.selectedProjects || []) {
+    const action = (p.action || "kept").toLowerCase();
+    projects.appendChild(el("li", { class: "ai-proj" }, [
+      el("div", { class: "ai-proj-name" }, [
+        el("span", { text: p.name || "Untitled" }),
+        el("span", { class: `byot-action byot-action-${action}`, text: action }),
+      ]),
+      p.reason ? el("div", { class: "ai-proj-reason", text: p.reason }) : null,
+    ]));
+  }
+  if (!projects.childNodes.length) projects.appendChild(el("li", { text: "No projects returned." }));
+
+  // Skills to add
+  const add = $("#byotSkillsAdd");
+  add.replaceChildren();
+  if ((data.skillsToAdd || []).length) {
+    for (const s of data.skillsToAdd) add.appendChild(el("span", { class: "ai-chip ai-chip-add", text: s }));
+  } else {
+    add.appendChild(el("span", { class: "hint", text: "— none —" }));
+  }
+
+  // Skills to remove
+  const remove = $("#byotSkillsRemove");
+  remove.replaceChildren();
+  if ((data.skillsToRemove || []).length) {
+    for (const s of data.skillsToRemove) remove.appendChild(el("span", { class: "ai-chip ai-chip-remove", text: s }));
+  } else {
+    remove.appendChild(el("span", { class: "hint", text: "— none —" }));
+  }
+
+  // Warnings
+  const warnings = $("#byotWarnings");
+  warnings.replaceChildren();
+  if ((data.warnings || []).length) {
+    for (const w of data.warnings) warnings.appendChild(el("li", { text: w }));
+  } else {
+    warnings.appendChild(el("li", { class: "hint", text: "No warnings — only the projects region changed." }));
+  }
+
+  // Considered repos (with README indicator)
+  const considered = $("#byotConsidered");
+  considered.replaceChildren();
+  for (const r of data.consideredRepos || []) {
+    const readme = r.hasReadme ? "  ✓ README" : "  ✗ no README";
+    considered.appendChild(el("li", { text: `${r.name}  ★${r.stargazers ?? 0}${readme}` }));
+  }
+
+  $("#byotDetails").hidden = false;
+  $("#byotSection").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+/* ---- wiring: tabs + starter + drop zone + submit + copy/download ---- */
+setupByotDropzone();
+
+// Step 2 tab toggle
+$("#byotTabUpload").addEventListener("click", () => switchByotTab("upload"));
+$("#byotTabPaste").addEventListener("click", () => switchByotTab("paste"));
+
+// "Insert starter template" — drop a marker-ready template into the editor
+$("#byotStarterLink").addEventListener("click", () => {
+  const editor = ensureByotEditor();
+  if (!editor) { toast("Editor is still loading — try again in a moment."); return; }
+  editor.setValue(BYOT_STARTER_TEMPLATE);
+  switchByotTab("paste");
+  editor.refresh();
+  $("#byotMarkerWarn").hidden = true;
+  toast("Starter template inserted — edit your header/education, then Generate.");
+});
+
+$("#byotGenerateBtn").addEventListener("click", () => { generateByotTailor(); });
+
+$("#byotCopyBtn").addEventListener("click", async () => {
+  if (!byotLastLatex) return;
+  try {
+    await navigator.clipboard.writeText(byotLastLatex);
+    flashButton($("#byotCopyBtn"), "✓ Copied!");
+    toast("LaTeX copied to clipboard");
+  } catch {
+    window.prompt("Copy the LaTeX source:", byotLastLatex);
+  }
+});
+
+$("#byotDownloadBtn").addEventListener("click", () => {
+  if (!byotLastLatex) return;
+  const blob = new Blob([byotLastLatex], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = el("a", { href: url, download: "tailored-resume.tex" });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast("Downloaded tailored-resume.tex");
+});
+
+// Init CodeMirror on page load (poll until CDN arrives, with max retries)
+(function initCodemirrorPoll(attempt) {
+  attempt = attempt || 0;
+  const MAX_POLL = 30; // ~4.5 seconds
+  const editor = ensureByotEditor();
+  if (editor) {
+    editor.setValue(""); // ready
+  } else if (typeof CodeMirror === "undefined" && attempt < MAX_POLL) {
+    setTimeout(() => initCodemirrorPoll(attempt + 1), 150);
+  }
+  // If CDN never loads, the editor area stays inert — user can still upload/paste.
+})();
+
+/* ============================================================
+   SCROLL REVEAL  (fade-in-up)
+   Adds the .fade-in-up class to portfolio panels + stat cards,
+   then flips them to .in as they scroll into view. Idempotent:
+   already-tagged elements are skipped, so it's safe to call on
+   every generate.
+   ============================================================ */
+function revealOnScroll() {
+  const targets = document.querySelectorAll(
+    "#portfolio .panel, #portfolio .stat-card"
+  );
+  if (!("IntersectionObserver" in window)) {
+    // No IO support — just show everything.
+    targets.forEach((el) => el.classList.add("fade-in-up", "in"));
+    return;
+  }
+  const io = new IntersectionObserver((entries, obs) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add("in");
+      obs.unobserve(entry.target);
+    });
+  }, { threshold: 0.12 });
+
+  targets.forEach((el, i) => {
+    if (el.classList.contains("fade-in-up")) return;   // already handled
+    el.classList.add("fade-in-up");
+    el.style.animationDelay = Math.min(i * 60, 400) + "ms";
+    io.observe(el);
+  });
+}
