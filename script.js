@@ -674,10 +674,10 @@ function showError(err) {
   const kind = err instanceof GHError ? err.kind : "http";
 
   const presets = {
-    notfound:  { icon: "🔍", title: "User not found", msg: `No GitHub user named “${state.username}”. Check the spelling and try again.` },
+    notfound: { icon: "🔍", title: "User not found", msg: `No GitHub user named “${state.username}”. Check the spelling and try again.` },
     ratelimit: { icon: "⏳", title: "Rate limit reached", msg: "You've hit GitHub's unauthenticated limit (60/hour). Add a personal access token via the 🔑 button to raise it to 5,000/hour, then retry." },
-    network:   { icon: "📡", title: "Network error", msg: "Couldn't reach GitHub. Check your internet connection and retry." },
-    http:      { icon: "⚠️", title: "Something went wrong", msg: err.message || "An unexpected error occurred." },
+    network: { icon: "📡", title: "Network error", msg: "Couldn't reach GitHub. Check your internet connection and retry." },
+    http: { icon: "⚠️", title: "Something went wrong", msg: err.message || "An unexpected error occurred." },
   };
   const p = presets[kind] || presets.http;
 
@@ -754,7 +754,7 @@ function loadResumeDetails(username) {
   } catch { return {}; }
 }
 function saveResumeDetails(username, details) {
-  try { localStorage.setItem(RESUME_KEY(username), JSON.stringify(details)); } catch {}
+  try { localStorage.setItem(RESUME_KEY(username), JSON.stringify(details)); } catch { }
 }
 
 /** Prefill the editor form: saved values first, else sensible GitHub-derived defaults. */
@@ -898,8 +898,10 @@ function buildStatsSnapshot() {
     el("div", { class: "r-stat" }, [el("b", { text: String(longest) }), el("span", { text: "Longest Streak" })]),
   ]);
 
-  const streakLine = el("div", { class: "r-summary", text:
-    `Current streak: ${current} day${current === 1 ? "" : "s"}  ·  Longest: ${longest} days  ·  Active days (recent): ${activeDays}` });
+  const streakLine = el("div", {
+    class: "r-summary", text:
+      `Current streak: ${current} day${current === 1 ? "" : "s"}  ·  Longest: ${longest} days  ·  Active days (recent): ${activeDays}`
+  });
 
   // language bars (top 6)
   const langEntries = Object.entries(state.languages).sort((a, b) => b[1] - a[1]);
@@ -1322,7 +1324,7 @@ function ensureByotEditor() {
 /** True if a template contains BOTH project markers (the required pair). */
 function byotHasMarkers(text) {
   return String(text).includes("% --- AI_PROJECTS_START --- %") &&
-         String(text).includes("% --- AI_PROJECTS_END --- %");
+    String(text).includes("% --- AI_PROJECTS_END --- %");
 }
 
 /* ---- Step 2 tabs: "Upload .tex File"  |  "Paste LaTeX Code" ----
