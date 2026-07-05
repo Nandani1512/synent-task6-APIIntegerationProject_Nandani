@@ -9,7 +9,7 @@
 const API = "https://api.github.com";
 // Base URL of the JD->LaTeX backend. Override in config.local.js with
 // `window.BACKEND_URL = "https://your-backend…"` to point at a deployed server.
-const BACKEND_URL = (typeof window !== "undefined" && window.BACKEND_URL) || "http://localhost:3000";
+const BACKEND_URL = (typeof window !== "undefined" && window.BACKEND_URL) || "https://synent-task6-apiintegerationproject.onrender.com";
 const TOKEN_KEY = "ghpf_token";
 const LANG_FETCH_LIMIT = 3;      // cap per-repo language calls to protect the 60/hr rate limit
 const TOP_LANGS = 8;             // skill bars to show
