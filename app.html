@@ -241,19 +241,19 @@
 
       <!-- ============== TAILOR YOUR RÉSUMÉ  (JD + your template -> surgical injection) ============== -->
       <section class="panel no-print" id="byotSection">
-        <h2 class="panel-title title-gradient">Tailor Your Résumé <span class="ai-badge"><span class="ai-badge-dot"></span>AI</span> <span class="hint">(paste a JD + your LaTeX template — AI injects tailored projects between your markers)</span></h2>
+        <h2 class="panel-title title-gradient">Tailor Your Résumé <span class="ai-badge"><span class="ai-badge-dot"></span>AI</span></h2>
 
         <!-- Step 1 — Job Description -->
         <p class="form-section step-label"><span class="step-num">1</span> Paste Job Description <span class="req">*</span></p>
         <textarea id="byotJD" rows="6" required class="byot-jd"
-          placeholder="Paste the full job description here. The AI ranks your GitHub repos against it and writes ATS-optimized X-Y-Z bullets (Accomplished X, measured by Y, by doing Z) grounded only in your real repo data."></textarea>
+          placeholder="Paste the full job description here…"></textarea>
 
         <!-- Step 2 — Template (upload OR paste) -->
         <p class="form-section step-label">
           <span class="step-num">2</span> Your LaTeX Template <span class="opt">(optional)</span>
           <button type="button" id="byotStarterLink" class="byot-starter-link">Reset to starter template</button>
         </p>
-        <p class="hint byot-step-hint">A ready-to-use résumé template is already loaded — just paste a JD and generate. Upload or paste your own <code>.tex</code> to use it instead; we handle the AI injection point for you.</p>
+        <p class="hint byot-step-hint">A template is preloaded — just paste a JD and generate, or upload your own <code>.tex</code>.</p>
 
         <div class="tab-toggle" role="tablist" aria-label="Template input method">
           <button type="button" class="tab-btn active" id="byotTabUpload" role="tab"
@@ -266,8 +266,8 @@
         <div class="tab-panel" id="byotPanelUpload" role="tabpanel" aria-labelledby="byotTabUpload">
           <div id="byotDropzone" class="byot-dropzone" tabindex="0">
             <div class="byot-drop-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-            <p>Drop your <code>.tex</code> or <code>.txt</code> file here, or <strong>click to browse</strong></p>
-            <p class="hint">Any LaTeX résumé works. If it has no injection markers, we add them to your Projects section automatically — that's the <em>only</em> region the AI edits.</p>
+            <p>Drop your <code>.tex</code> file here, or <strong>click to browse</strong></p>
+            <p class="hint">Any LaTeX résumé works — we add the AI injection point automatically.</p>
             <input type="file" id="byotFileInput" accept=".tex,.txt" hidden />
           </div>
         </div>
@@ -285,7 +285,7 @@
 
         <div id="byotMarkerWarn" class="byot-note" hidden>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          No injection markers found — no problem. We'll add them to your Projects section automatically when you generate.
+          No markers? No problem — we add them automatically when you generate.
         </div>
 
         <!-- Step 3 — Generate -->
@@ -305,7 +305,7 @@
 
         <!-- Step 4 — Output (revealed on success) -->
         <div id="byotResult" class="byot-result-bar" hidden>
-          <span class="byot-result-label">Done — the editor above shows your tailored <code>.tex</code> (only the projects region changed)</span>
+          <span class="byot-result-label">Done — only your projects region changed.</span>
           <span class="byot-result-actions">
             <button id="byotCopyBtn" class="btn btn-ghost btn-sm">Copy Code</button>
             <button id="byotDownloadBtn" class="btn btn-ghost btn-sm">Download .tex</button>
@@ -321,7 +321,7 @@
               <span class="ai-code-title">ATS Changes Made</span>
             </div>
             <div class="ai-code-body">
-              <p class="hint byot-skills-note">Skill suggestions only — your Skills section is never edited.</p>
+              <p class="hint byot-skills-note">Suggestions only — your Skills section isn't edited.</p>
               <h4 class="byot-detail-title">Skills to add</h4>
               <div id="byotSkillsAdd" class="ai-chips"></div>
               <h4 class="byot-detail-title">Skills to remove</h4>
