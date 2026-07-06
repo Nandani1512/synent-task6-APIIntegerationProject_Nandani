@@ -9,8 +9,6 @@ Gemini** service on the back end. No frameworks, no build step.
 
 **🔗 Live demo (full app, incl. AI):** https://synent-task6-apiintegerationproject.onrender.com/
 
-**🔗 Frontend on GitHub Pages:** https://nandani1512.github.io/synent-task6-APIIntegerationProject_Nandani/
-&nbsp;·&nbsp; try [`?user=torvalds`](https://synent-task6-apiintegerationproject.onrender.com/?user=torvalds)
 
 > The Render URL serves the whole app (front end **and** the AI backend), so the résumé-tailoring
 > features work there out of the box. The GitHub Pages copy is the same front end, pointed at the
