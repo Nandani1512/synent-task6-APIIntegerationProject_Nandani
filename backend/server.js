@@ -6,6 +6,9 @@
      GET  /api/health           liveness + config sanity
      POST /api/resume/tailor    surgically inject tailored projects into
                                 the user's own LaTeX template (BYOT)
+     POST /api/resume/enhance   JD-driven review of a full resume: keyword
+                                match, gaps, bullet rewrites, ATS fixes
+                                (advice only — does not rewrite the resume)
 
    The Gemini key is read from the environment here and never sent to
    the client.
@@ -18,8 +21,10 @@ const express = require("express");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const { tailorTemplate } = require("./src/byotPipeline");
+const { enhanceResume } = require("./src/enhance");
 
 const app = express();
+app.set("trust proxy", 1);
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: "1mb" }));
@@ -97,6 +102,38 @@ app.post("/api/resume/tailor", tailorLimiter, async (req, res) => {
   } catch (err) {
     const status = err.status || mapStatus(err.kind);
     if (status >= 500) console.error("[tailor]", err);
+    return res.status(status).json({ error: err.message || "Internal error", kind: err.kind || "error" });
+  }
+});
+
+/* ---------- Enhance endpoint (JD-driven whole-resume review) ---------- */
+app.post("/api/resume/enhance", tailorLimiter, async (req, res) => {
+  const body = req.body || {};
+  const resumeText = body.resume_text || body.resumeText || body.latex_template || body.latexTemplate;
+  const jobDescription = body.job_description || body.jobDescription;
+
+  // Input presence + length validation — prevent prompt-stuffing / quota abuse.
+  const MAX_JD_CHARS = 15_000;
+  const MAX_RESUME_CHARS = 50_000;
+  if (!resumeText || !String(resumeText).trim()) {
+    return res.status(400).json({ error: "resume_text is required.", kind: "input" });
+  }
+  if (!jobDescription || !String(jobDescription).trim()) {
+    return res.status(400).json({ error: "job_description is required.", kind: "input" });
+  }
+  if (String(jobDescription).length > MAX_JD_CHARS) {
+    return res.status(400).json({ error: `Job description exceeds ${MAX_JD_CHARS} characters.`, kind: "input" });
+  }
+  if (String(resumeText).length > MAX_RESUME_CHARS) {
+    return res.status(400).json({ error: `Resume text exceeds ${MAX_RESUME_CHARS} characters.`, kind: "input" });
+  }
+
+  try {
+    const result = await enhanceResume(resumeText, jobDescription, {});
+    return res.json(result);
+  } catch (err) {
+    const status = err.status || mapStatus(err.kind);
+    if (status >= 500) console.error("[enhance]", err);
     return res.status(status).json({ error: err.message || "Internal error", kind: err.kind || "error" });
   }
 });

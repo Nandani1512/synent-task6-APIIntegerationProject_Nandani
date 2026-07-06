@@ -167,6 +167,26 @@ a.brand:active {
   transform: scale(.94);
 }
 
+/* Crisp SVG icons inside the top-bar buttons + subtle hover polish. */
+.icon-btn .icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  transition: transform .25s ease, color .2s ease;
+}
+
+.icon-btn:hover .icon {
+  color: var(--accent);
+  transform: scale(1.08);
+}
+
+/* Theme toggle: sun shows in dark mode (click → light), moon in light mode. */
+.theme-toggle .icon-sun { display: none; }
+.theme-toggle .icon-moon { display: block; }
+[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+.theme-toggle:hover .icon { transform: rotate(-18deg) scale(1.08); }
+
 .rate-limit {
   font-size: 12px;
   color: var(--text-dim);
@@ -911,6 +931,45 @@ a.brand:active {
 
 .byot-starter-link:hover {
   filter: brightness(1.1);
+}
+
+/* "(optional)" marker on the template step label */
+.opt {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.byot-step-hint {
+  margin: -2px 0 12px;
+}
+
+/* Friendly, non-alarming note (replaces the old red missing-marker error) */
+.byot-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-sunken));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 10px;
+}
+
+.byot-note svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+.byot-note code {
+  background: var(--bg-elev);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
 }
 
 /* Step 2 tab toggle (Upload .tex  |  Paste LaTeX) */

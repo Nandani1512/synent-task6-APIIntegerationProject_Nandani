@@ -260,7 +260,10 @@
         <span>Dev Portfolio Generator</span>
       </div>
       <div class="topbar-actions">
-        <button id="themeToggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">🌙</button>
+        <button id="themeToggle" class="icon-btn theme-toggle" title="Toggle theme" aria-label="Toggle theme">
+          <svg class="icon icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          <svg class="icon icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
+        </button>
         <a href="app.html" class="lp-topbar-link">Launch App →</a>
       </div>
     </div>
@@ -395,7 +398,12 @@
       const saved = localStorage.getItem("ghpf_theme");
       if (saved) root.dataset.theme = saved;
       const btn = document.getElementById("themeToggle");
-      const sync = () => { btn.textContent = root.dataset.theme === "dark" ? "☀️" : "🌙"; };
+      // Sun/moon SVGs are toggled by CSS off [data-theme]; sync only the label.
+      const sync = () => {
+        const label = root.dataset.theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
+        btn.setAttribute("aria-label", label);
+        btn.setAttribute("title", label);
+      };
       sync();
       btn.addEventListener("click", () => {
         const next = root.dataset.theme === "dark" ? "light" : "dark";

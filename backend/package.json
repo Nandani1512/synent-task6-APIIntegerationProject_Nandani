@@ -11,7 +11,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test/smoke.js"
+    "test": "node test/smoke.js",
+    "test:enhance": "node test/enhance.smoke.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

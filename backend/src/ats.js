@@ -109,10 +109,16 @@ const REGION_SYSTEM_INSTRUCTION = [
   "7. KEYWORD HIGHLIGHT: within the project text, wrap the exact JD keywords that",
   "   the repo genuinely supports (e.g. React, Docker, PostgreSQL) in \\textbf{...}.",
   "   Only wrap real, supported keywords — never invent or over-highlight.",
-  "8. SKILLS SUGGESTIONS: skills_to_add = JD skills the candidate clearly has but",
+  "8. BULLET QUALITY (applies ONLY to bullets you write for REPLACED/ADDED projects,",
+  "   never to kept originals which stay verbatim): open each bullet with a strong",
+  "   action verb (Built, Designed, Architected, Engineered, Optimized, Implemented,",
+  "   Shipped); never with weak/passive phrasing (\"Worked on\", \"Helped with\",",
+  "   \"Responsible for\", \"Supported\"). Avoid vague filler and keyword stuffing,",
+  "   keep each bullet to one or two lines, and write \"and\" rather than \"&\".",
+  "9. SKILLS SUGGESTIONS: skills_to_add = JD skills the candidate clearly has but",
   "   may not list; skills_to_remove = skills irrelevant to THIS JD they could trim.",
   "   These are suggestions for the UI — you do NOT edit any skills section.",
-  "9. Output must satisfy the JSON schema exactly. projects_latex is the full",
+  "10. Output must satisfy the JSON schema exactly. projects_latex is the full",
   "   region text that goes BETWEEN the markers (do not include the marker lines).",
 ].join("\n");
 

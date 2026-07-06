@@ -93,7 +93,15 @@ const SYSTEM_INSTRUCTION = [
   "   ordered by how strongly the JD emphasizes them.",
   "6. For each chosen project add `reason`: one short sentence explaining",
   "   why it matches THIS job description (skills/tech overlap).",
-  "7. Be concise and recruiter-friendly. Output must satisfy the JSON schema.",
+  "7. POWER VERBS: start every bullet with a strong action verb (Built, Designed,",
+  "   Architected, Engineered, Led, Optimized, Implemented, Shipped). NEVER open",
+  "   with weak/passive phrasing such as \"Worked on\", \"Helped with\",",
+  "   \"Responsible for\", \"Supported\", \"Assisted\" — these read as no ownership.",
+  "8. RED FLAGS to avoid: passive voice, vague filler (\"various features\"),",
+  "   keyword stuffing without evidence, and bullets with no concrete result.",
+  "9. ATS-FRIENDLY: write \"and\" not \"&\"; keep each bullet to one or two lines;",
+  "   mirror the JD's exact wording for a skill when the repo genuinely supports it.",
+  "10. Be concise and recruiter-friendly. Output must satisfy the JSON schema.",
 ].join("\n");
 
 /* ------------------------------------------------------------ Prompt */

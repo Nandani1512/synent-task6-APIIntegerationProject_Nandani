@@ -63,8 +63,13 @@ const state = {
   syncThemeIcon();
 })();
 function syncThemeIcon() {
+  // Sun/moon SVGs are toggled purely by CSS off [data-theme]; here we only
+  // keep the accessible label in sync with the action the click will perform.
   const dark = document.documentElement.dataset.theme === "dark";
-  $("#themeToggle").textContent = dark ? "☀️" : "🌙";
+  const label = dark ? "Switch to light theme" : "Switch to dark theme";
+  const btn = $("#themeToggle");
+  btn.setAttribute("aria-label", label);
+  btn.setAttribute("title", label);
 }
 $("#themeToggle").addEventListener("click", () => {
   const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
@@ -1327,6 +1332,55 @@ function byotHasMarkers(text) {
     String(text).includes("% --- AI_PROJECTS_END --- %");
 }
 
+const BYOT_MARKER_START = "% --- AI_PROJECTS_START --- %";
+const BYOT_MARKER_END = "% --- AI_PROJECTS_END --- %";
+
+/**
+ * Guarantee the template carries the injection marker pair so the user never
+ * has to think about them. If markers are absent we place them intelligently:
+ *   1. inside an existing "Projects" section (right after its heading), else
+ *   2. as a new Projects section just before \end{document}, else
+ *   3. appended to the end (no \end{document} found).
+ *
+ * @param {string} latex
+ * @returns {{ latex: string, added: boolean, where: string }}
+ */
+function byotEnsureMarkers(latex) {
+  const src = String(latex);
+  if (byotHasMarkers(src)) return { latex: src, added: false, where: "present" };
+
+  const block = [
+    BYOT_MARKER_START,
+    "  \\item Your tailored projects will be injected here, matched to the job description.",
+    BYOT_MARKER_END,
+  ].join("\n");
+
+  // 1) existing Projects section — \section{Projects} or \section*{Projects}, any casing/wording.
+  const sectionRe = /\\section\*?\{[^}]*projects[^}]*\}[^\n]*/i;
+  const m = src.match(sectionRe);
+  if (m) {
+    const idx = src.indexOf(m[0]) + m[0].length;
+    return { latex: src.slice(0, idx) + "\n" + block + src.slice(idx), added: true, where: "projects-section" };
+  }
+
+  // 2) no Projects section — inject a fresh one before \end{document}.
+  const projectsSection = [
+    "",
+    "\\section*{Projects}",
+    "\\begin{itemize}[leftmargin=*]",
+    block,
+    "\\end{itemize}",
+    "",
+  ].join("\n");
+  const endDoc = src.lastIndexOf("\\end{document}");
+  if (endDoc !== -1) {
+    return { latex: src.slice(0, endDoc) + projectsSection + "\n" + src.slice(endDoc), added: true, where: "new-section" };
+  }
+
+  // 3) not even a document body — just append.
+  return { latex: src + "\n" + projectsSection, added: true, where: "appended" };
+}
+
 /* ---- Step 2 tabs: "Upload .tex File"  |  "Paste LaTeX Code" ----
    Both tabs feed the SAME CodeMirror instance (single source of truth):
    the upload dropzone fills it, the paste tab shows it for direct editing. */
@@ -1468,14 +1522,16 @@ function readTemplateFile(file) {
       setTimeout(() => readTemplateFile(file), 300);
       return;
     }
-    editor.setValue(text);
+    // Auto-place the injection markers if the uploaded file lacks them, so the
+    // user never has to add them by hand.
+    const ensured = byotEnsureMarkers(text);
+    editor.setValue(ensured.latex);
     switchByotTab("paste");   // reveal the editor so the user sees the loaded template
     editor.refresh();
-
-    // marker check (both markers required)
-    const hasMarkers = byotHasMarkers(text);
-    $("#byotMarkerWarn").hidden = hasMarkers;
-    if (!hasMarkers) toast("Template is missing the project injection markers.");
+    $("#byotMarkerWarn").hidden = true;
+    toast(ensured.added
+      ? "Template loaded — added the AI injection point to your Projects section automatically."
+      : "Template loaded.");
   };
   reader.onerror = () => toast("Could not read the file. Try again.");
   reader.readAsText(file, "UTF-8");
@@ -1487,11 +1543,26 @@ async function generateByotTailor() {
   if (!editor) { toast("CodeMirror hasn't loaded yet — wait a moment and try again."); return; }
   if (!state.username) { toast("Generate a portfolio first."); return; }
 
-  const latexTemplate = editor.getValue();
-  if (!latexTemplate.trim()) { toast("Upload or paste your LaTeX template first."); return; }
-  if (!latexTemplate.includes(BYOT_MARKER)) {
-    showByotError(`Template is missing the project marker "${BYOT_MARKER}". Add it to your template and try again.`);
-    return;
+  let latexTemplate = editor.getValue();
+  // No template supplied? Silently start from the built-in starter so the user
+  // never has to bring their own.
+  if (!latexTemplate.trim()) {
+    latexTemplate = BYOT_STARTER_TEMPLATE;
+    editor.setValue(latexTemplate);
+    switchByotTab("paste");
+    editor.refresh();
+    toast("Started from a built-in résumé template — edit the header/education any time.");
+  }
+  // Guarantee the injection markers exist (auto-place them if missing) so a
+  // missing-marker error can never block the user.
+  const ensured = byotEnsureMarkers(latexTemplate);
+  if (ensured.added) {
+    latexTemplate = ensured.latex;
+    editor.setValue(latexTemplate);
+    switchByotTab("paste");
+    editor.refresh();
+    $("#byotMarkerWarn").hidden = true;
+    toast("Added the AI injection point to your Projects section automatically.");
   }
   const jobDescription = $("#byotJD").value.trim();
   if (!jobDescription) { toast("Paste a job description first."); $("#byotJD").focus(); return; }
@@ -1641,7 +1712,7 @@ $("#byotStarterLink").addEventListener("click", () => {
   switchByotTab("paste");
   editor.refresh();
   $("#byotMarkerWarn").hidden = true;
-  toast("Starter template inserted — edit your header/education, then Generate.");
+  toast("Reset to the starter template — edit your header/education, then Generate.");
 });
 
 $("#byotGenerateBtn").addEventListener("click", () => { generateByotTailor(); });
@@ -1675,7 +1746,9 @@ $("#byotDownloadBtn").addEventListener("click", () => {
   const MAX_POLL = 30; // ~4.5 seconds
   const editor = ensureByotEditor();
   if (editor) {
-    editor.setValue(""); // ready
+    // Preload the starter so the user can tailor with zero setup — no template
+    // to paste, no markers to add. They can still upload/replace it any time.
+    if (!editor.getValue().trim()) editor.setValue(BYOT_STARTER_TEMPLATE);
   } else if (typeof CodeMirror === "undefined" && attempt < MAX_POLL) {
     setTimeout(() => initCodemirrorPoll(attempt + 1), 150);
   }

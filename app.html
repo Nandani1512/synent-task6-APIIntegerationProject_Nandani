@@ -48,8 +48,11 @@
       </a>
       <div class="topbar-actions">
         <span id="rateLimit" class="rate-limit" title="GitHub API requests remaining this hour"></span>
-        <button id="tokenBtn" class="icon-btn" title="Set personal access token"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></button>
-        <button id="themeToggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">🌙</button>
+        <button id="tokenBtn" class="icon-btn" title="Set personal access token" aria-label="Set personal access token"><svg class="icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg></button>
+        <button id="themeToggle" class="icon-btn theme-toggle" title="Toggle theme" aria-label="Toggle theme">
+          <svg class="icon icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          <svg class="icon icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
+        </button>
       </div>
     </div>
   </header>
@@ -247,9 +250,10 @@
 
         <!-- Step 2 — Template (upload OR paste) -->
         <p class="form-section step-label">
-          <span class="step-num">2</span> Your LaTeX Template <span class="req">*</span>
-          <button type="button" id="byotStarterLink" class="byot-starter-link">Insert starter template</button>
+          <span class="step-num">2</span> Your LaTeX Template <span class="opt">(optional)</span>
+          <button type="button" id="byotStarterLink" class="byot-starter-link">Reset to starter template</button>
         </p>
+        <p class="hint byot-step-hint">A ready-to-use résumé template is already loaded — just paste a JD and generate. Upload or paste your own <code>.tex</code> to use it instead; we handle the AI injection point for you.</p>
 
         <div class="tab-toggle" role="tablist" aria-label="Template input method">
           <button type="button" class="tab-btn active" id="byotTabUpload" role="tab"
@@ -263,7 +267,7 @@
           <div id="byotDropzone" class="byot-dropzone" tabindex="0">
             <div class="byot-drop-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
             <p>Drop your <code>.tex</code> or <code>.txt</code> file here, or <strong>click to browse</strong></p>
-            <p class="hint">Template must include the <code>% --- AI_PROJECTS_START --- %</code> … <code>% --- AI_PROJECTS_END --- %</code> marker pair — that's the <em>only</em> region the AI edits.</p>
+            <p class="hint">Any LaTeX résumé works. If it has no injection markers, we add them to your Projects section automatically — that's the <em>only</em> region the AI edits.</p>
             <input type="file" id="byotFileInput" accept=".tex,.txt" hidden />
           </div>
         </div>
@@ -279,8 +283,9 @@
           </div>
         </div>
 
-        <div id="byotMarkerWarn" class="ai-error" hidden>
-          ⚠️ This template is missing the required <code>% --- AI_PROJECTS_START --- %</code> … <code>% --- AI_PROJECTS_END --- %</code> marker pair. The AI won't know where to inject projects. Add both markers, or click <strong>Insert starter template</strong>.
+        <div id="byotMarkerWarn" class="byot-note" hidden>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          No injection markers found — no problem. We'll add them to your Projects section automatically when you generate.
         </div>
 
         <!-- Step 3 — Generate -->
