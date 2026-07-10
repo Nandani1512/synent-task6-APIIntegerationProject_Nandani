@@ -21,7 +21,7 @@ const { str, strList, toSelectedProject } = require("./models");
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_MODEL = "gemini-2.5-flash";
-const MAX_PROJECTS = 4; // hard cap: recruiter picks "3-4"
+const MAX_PROJECTS = 3; // hard cap: recruiter picks max 2-3 to keep it 1 page
 const MAX_BULLETS = 3; // X-Y-Z bullets per project
 
 /** Typed error so the controller can branch on failure kind. */
@@ -79,15 +79,15 @@ const SYSTEM_INSTRUCTION = [
   "You tailor a candidate's GitHub projects to a specific Job Description (JD).",
   "",
   "Hard rules:",
-  "1. Choose the 3 to 4 projects MOST relevant to the JD. Never more than 4.",
+  "1. Choose a maximum of 2 to 3 projects MOST relevant to the JD to ensure the resume fits on a single page. Never more than 3.",
   "2. For each chosen project write exactly 3 achievement bullets using the",
   "   X-Y-Z formula: \"Accomplished X, as measured by Y, by doing Z\".",
   "3. Ground every bullet ONLY in facts present in the provided repository",
   "   data (name, description, languages, topics, stars, forks, homepage).",
   "   NEVER invent metrics, percentages, user counts, dollar amounts, dates,",
   "   or technologies that are not in the data. If no numeric measure exists,",
-  "   express Y qualitatively from real facts (e.g. a feature, a language",
-  "   count, stargazers) rather than fabricating a number.",
+  "   infer structural metrics (e.g. language count, API endpoints, stargazers) to",
+  "   ensure ATS friendliness, but DO NOT fabricate false business numbers.",
   "4. `technologies` must be drawn from the repo's languages/topics only.",
   "5. `matchedSkills` lists the candidate's real skills that the JD asks for,",
   "   ordered by how strongly the JD emphasizes them.",
@@ -137,7 +137,7 @@ function buildRecruiterPrompt(repos, jobDescription) {
     "CANDIDATE GITHUB REPOSITORIES (facts you may use — nothing else):",
     JSON.stringify(compact, null, 2),
     "",
-    "Select the 3-4 best-matching projects and return the JSON object.",
+    "Select a maximum of 2 to 3 best-matching projects to ensure a 1-page resume, and return the JSON object.",
   ].join("\n");
 }
 
