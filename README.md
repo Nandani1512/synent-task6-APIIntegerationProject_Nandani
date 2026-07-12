@@ -107,7 +107,7 @@ config.local.js (local only)               POST /api/resume/enhance             
 
 ## 🔌 Backend API
 
-Base URL (deployed): `https://synent-task6-apiintegerationproject.onrender.com`
+Base URL (deployed): `https://synent-task6-api-integeration-proje.vercel.app/`
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
